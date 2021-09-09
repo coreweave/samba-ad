@@ -71,7 +71,7 @@ cat > /etc/samba/smb.conf << EOL
     vfs objects = acl_xattr
     map acl inherit = Yes
     store dos attributes = Yes
-	acl_xattr:ignore system acls = yes
+	acl_xattr:ignore system acls = no
 	acl_xattr:default acl style = windows
 
     # Share Setting Globally
