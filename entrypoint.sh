@@ -71,6 +71,8 @@ cat > /etc/samba/smb.conf << EOL
     vfs objects = acl_xattr
     map acl inherit = Yes
     store dos attributes = Yes
+	acl_xattr:ignore system acls = yes
+	acl_xattr:default acl style = windows
 
     # Share Setting Globally
     unix extensions = no
@@ -105,6 +107,7 @@ cat > /etc/samba/smb.conf << EOL
    guest ok = no
    veto files = /.apdisk/.DS_Store/.TemporaryItems/.Trashes/desktop.ini/ehthumbs.db/Network Trash Folder/Temporary Items/Thumbs.db/
    delete veto files = yes
+   nt acl support = yes
 EOL
 
 net ads join -U"${AD_USERNAME}"%"${AD_PASSWORD}"
