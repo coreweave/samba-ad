@@ -120,6 +120,8 @@ until getent passwd "${DOMAINNAME}\\${AD_USERNAME}"; do sleep 1; done
 chown root:"${DOMAINNAME}\\Domain Admins" /share/samba/${VOLUME}
 chmod 0770 /share/samba/${VOLUME}
 
+net rpc rights grant "${DOMAINNAME}\\Domain Admins" SeDiskOperatorPrivilege   -U"${AD_USERNAME}"%"${AD_PASSWORD}"
+
 service smbd stop
 service nmbd stop
 service winbind stop
