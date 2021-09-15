@@ -71,8 +71,7 @@ cat > /etc/samba/smb.conf << EOL
     vfs objects = acl_xattr
     map acl inherit = Yes
     store dos attributes = Yes
-	acl_xattr:ignore system acls = no
-	acl_xattr:default acl style = windows
+    acl_xattr:ignore system acls = yes
 
     # Share Setting Globally
     unix extensions = no
@@ -95,19 +94,17 @@ cat > /etc/samba/smb.conf << EOL
     server min protocol = SMB2_10
 
     # Time Machine
-	fruit:delete_empty_adfiles = yes
-	fruit:time machine = yes
-	fruit:veto_appledouble = no
-	fruit:wipe_intentionally_left_blank_rfork = yes
+    fruit:delete_empty_adfiles = yes
+    fruit:time machine = yes
+    fruit:veto_appledouble = no
+    fruit:wipe_intentionally_left_blank_rfork = yes
 
 [${VOLUME}]
    path = /share/samba/${VOLUME}
-   browsable = yes
    read only = no
    guest ok = no
    veto files = /.apdisk/.DS_Store/.TemporaryItems/.Trashes/desktop.ini/ehthumbs.db/Network Trash Folder/Temporary Items/Thumbs.db/
    delete veto files = yes
-   nt acl support = yes
 EOL
 
 net ads join -U"${AD_USERNAME}"%"${AD_PASSWORD}"
@@ -118,9 +115,10 @@ service smbd start
 service nmbd start
 service winbind start
 
-until getent group "${DOMAINNAME}\\${GROUPNAME}"; do sleep 1; done
+until getent passwd "${DOMAINNAME}\\${AD_USERNAME}"; do sleep 1; done
 
-chown root:"${DOMAINNAME}\\${GROUPNAME}" /share/samba/${VOLUME}
+chown root:"${DOMAINNAME}\\Domain Admins" /share/samba/${VOLUME}
+chmod 0770 /share/samba/${VOLUME}
 
 service smbd stop
 service nmbd stop
