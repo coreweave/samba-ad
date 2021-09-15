@@ -28,7 +28,7 @@ cat > /etc/krb5.conf << EOL
 EOL
 
 cat > /etc/samba/user.map << EOL
-!root = ${DOMAINNAME}\Administrator ${DOMAINNAME}\administrator Administrator administrator
+!root = ${DOMAINNAME}\Administrator
 EOL
 
 cat > /etc/samba/smb.conf << EOL
@@ -61,7 +61,7 @@ cat > /etc/samba/smb.conf << EOL
     local master = no
     preferred master = no
     os level = 20
-    map to guest = bad user
+    #map to guest = bad user
     host msdfs = no
 
     # user Administrator workaround, without it you are unable to set privileges
@@ -70,14 +70,14 @@ cat > /etc/samba/smb.conf << EOL
     # For ACL support on domain member
     vfs objects = acl_xattr
     map acl inherit = Yes
-    store dos attributes = Yes
+    #store dos attributes = Yes
     acl_xattr:ignore system acls = yes
 
     # Share Setting Globally
-    unix extensions = no
-    reset on zero vc = yes
-    veto files = /.bash_logout/.bash_profile/.bash_history/.bashrc/
-    hide unreadable = yes
+    #unix extensions = no
+    #reset on zero vc = yes
+    #veto files = /.bash_logout/.bash_profile/.bash_history/.bashrc/
+    #hide unreadable = yes
 
     # disable printing completely
     load printers = no
@@ -86,25 +86,25 @@ cat > /etc/samba/smb.conf << EOL
     disable spoolss = yes
 
     # Security
-    client ipc max protocol = SMB3
-    client ipc min protocol = SMB2_10
-    client max protocol = SMB3
-    client min protocol = SMB2_10
-    server max protocol = SMB3
-    server min protocol = SMB2_10
+    #client ipc max protocol = SMB3
+    #client ipc min protocol = SMB2_10
+    #client max protocol = SMB3
+    #client min protocol = SMB2_10
+    #server max protocol = SMB3
+    #server min protocol = SMB2_10
 
     # Time Machine
-    fruit:delete_empty_adfiles = yes
-    fruit:time machine = yes
-    fruit:veto_appledouble = no
-    fruit:wipe_intentionally_left_blank_rfork = yes
+    #fruit:delete_empty_adfiles = yes
+    #fruit:time machine = yes
+    #fruit:veto_appledouble = no
+    #fruit:wipe_intentionally_left_blank_rfork = yes
 
 [${VOLUME}]
    path = /share/samba/${VOLUME}
    read only = no
-   guest ok = no
-   veto files = /.apdisk/.DS_Store/.TemporaryItems/.Trashes/desktop.ini/ehthumbs.db/Network Trash Folder/Temporary Items/Thumbs.db/
-   delete veto files = yes
+   #guest ok = no
+   #veto files = /.apdisk/.DS_Store/.TemporaryItems/.Trashes/desktop.ini/ehthumbs.db/Network Trash Folder/Temporary Items/Thumbs.db/
+   #delete veto files = yes
 EOL
 
 net ads join -U"${AD_USERNAME}"%"${AD_PASSWORD}"
