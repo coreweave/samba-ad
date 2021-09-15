@@ -109,13 +109,13 @@ EOL
 
 net ads join -U"${AD_USERNAME}"%"${AD_PASSWORD}"
 
-net ads dns register -U"${AD_USERNAME}"%"${AD_PASSWORD}"
-
 service smbd start
 service nmbd start
 service winbind start
 
 until getent passwd "${DOMAINNAME}\\${AD_USERNAME}"; do sleep 1; done
+
+net ads dns register -U"${AD_USERNAME}"%"${AD_PASSWORD}"
 
 chown root:"${DOMAINNAME}\\Domain Admins" /share/samba/${VOLUME}
 chmod 0770 /share/samba/${VOLUME}
