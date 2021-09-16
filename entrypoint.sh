@@ -28,7 +28,7 @@ cat > /etc/krb5.conf << EOL
 EOL
 
 cat > /etc/samba/user.map << EOL
-!root = ${DOMAINNAME}\Administrator
+!root = ${DOMAINNAME}\Administrator ${DOMAINNAME}\administrator Administrator administrator
 EOL
 
 cat > /etc/samba/smb.conf << EOL
@@ -39,30 +39,30 @@ cat > /etc/samba/smb.conf << EOL
 
     dedicated keytab file = /etc/krb5.keytab
     kerberos method = secrets and keytab
-    server string = Data %h
+    #server string = Data %h
 
     winbind use default domain = yes
-    winbind expand groups = 4
-    winbind nss info = rfc2307
-    winbind refresh tickets = Yes
-    winbind offline logon = yes
-    winbind normalize names = Yes
+    #winbind expand groups = 4
+    #winbind nss info = rfc2307
+    #winbind refresh tickets = Yes
+    #winbind offline logon = yes
+    #winbind normalize names = Yes
 
     ## map ids outside of domain to tdb files.
     idmap config *:backend = tdb
-    idmap config *:range = 2000-9999
+    idmap config *:range = 3000-9999
     ## map ids from the domain  the ranges may not overlap !
     idmap config ${DOMAINNAME} : backend = rid
     idmap config ${DOMAINNAME} : range = 10000-999999
     template shell = /bin/bash
     template homedir = /home/${DOMAINNAME}/%U
 
-    domain master = no
-    local master = no
-    preferred master = no
-    os level = 20
+    #domain master = no
+    #local master = no
+    #preferred master = no
+    #os level = 20
     #map to guest = bad user
-    host msdfs = no
+    #host msdfs = no
 
     # user Administrator workaround, without it you are unable to set privileges
     username map = /etc/samba/user.map
@@ -117,7 +117,7 @@ until getent passwd "${DOMAINNAME}\\${AD_USERNAME}"; do sleep 1; done
 
 net ads dns register -U"${AD_USERNAME}"%"${AD_PASSWORD}"
 
-chown root:"${DOMAINNAME}\\Domain Admins" /share/samba/${VOLUME}
+chown "${DOMAINNAME}\\Domain Admins":"${DOMAINNAME}\\Domain Admins" /share/samba/${VOLUME}
 chmod 0770 /share/samba/${VOLUME}
 
 net rpc rights grant "${DOMAINNAME}\\Domain Admins" SeDiskOperatorPrivilege   -U"${AD_USERNAME}"%"${AD_PASSWORD}"
