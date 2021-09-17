@@ -1,4 +1,4 @@
-FROM debian:stable
+FROM ubuntu:latest
 
 ENV TERM=xterm
 
