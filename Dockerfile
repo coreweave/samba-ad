@@ -129,6 +129,8 @@ WORKDIR /
 
 RUN rm -rf /samba-4.15.0
 
+RUN ln -s /usr/local/samba/lib/* /lib/ -f
+
 COPY entrypoint.sh /entrypoint.sh
 COPY supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 RUN chmod +x /entrypoint.sh
