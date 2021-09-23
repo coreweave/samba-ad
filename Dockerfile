@@ -5,8 +5,8 @@ ENV TERM=xterm
 ENV DEBIAN_FRONTEND noninteractive
 
 RUN apt-get -y update && \
-    apt-get -yqq --no-install-recommends install acl attr quota fam libpam-winbind \
-libpam-krb5 libnss-winbind krb5-config krb5-user ntp dnsutils ldb-tools supervisor smbclient samba-vfs-modules\
+    apt-get -yqq --no-install-recommends install acl attr quota fam \
+ ntp dnsutils ldb-tools supervisor smbclient \
     acl \
     apt-utils \
     attr \
