@@ -1,10 +1,10 @@
 #! /bin/bash
 
-service smbd stop
-service nmbd stop
-service winbind stop
+#service smbd stop
+#service nmbd stop
+#service winbind stop
 
-rm /etc/samba/smb.conf
+#rm /etc/samba/smb.conf
 rm /etc/krb5.conf
 
 cat > /etc/hosts << EOL
@@ -31,7 +31,7 @@ cat > /etc/samba/user.map << EOL
 !root = ${DOMAINNAME}\Administrator ${DOMAINNAME}\administrator Administrator administrator
 EOL
 
-cat > /etc/samba/smb.conf << EOL
+cat > /usr/local/samba/etc/smb.conf << EOL
 [global]
     workgroup = ${DOMAINNAME}
     security = ADS
@@ -72,6 +72,7 @@ cat > /etc/samba/smb.conf << EOL
     map acl inherit = Yes
     #store dos attributes = Yes
     acl_xattr:ignore system acls = yes
+	xattr:unprotected_ntacl_name = yes
 
     # Share Setting Globally
     #unix extensions = no
@@ -109,9 +110,9 @@ EOL
 
 net ads join -U"${AD_USERNAME}"%"${AD_PASSWORD}"
 
-service smbd start
-service nmbd start
-service winbind start
+smbd -D
+nmbd -D
+winbind -D
 
 until getent passwd "${DOMAINNAME}\\${AD_USERNAME}"; do sleep 1; done
 
