@@ -5,7 +5,7 @@ ENV TERM=xterm
 ENV DEBIAN_FRONTEND noninteractive
 
 RUN apt-get -y update && \
-    apt-get -yqq --no-install-recommends install acl attr quota fam \
+    apt-get -yqq --no-install-recommends install acl attr quota nano fam \
  ntp dnsutils ldb-tools supervisor smbclient \
     acl \
     apt-utils \
@@ -124,6 +124,10 @@ RUN make
 RUN make install
 
 ENV PATH=/usr/local/samba/bin/:/usr/local/samba/sbin/:$PATH
+
+WORKDIR /
+
+RUN rm -rf /samba-4.15.0
 
 COPY entrypoint.sh /entrypoint.sh
 COPY supervisord.conf /etc/supervisor/conf.d/supervisord.conf

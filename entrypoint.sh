@@ -4,8 +4,8 @@
 #service nmbd stop
 #service winbind stop
 
-#rm /etc/samba/smb.conf
-rm /etc/krb5.conf
+rm /usr/local/samba/etc/smb.conf
+rm /usr/local/samba/share/setup/krb5.conf
 
 cat > /etc/hosts << EOL
 ::1     localhost ip6-localhost ip6-loopback
@@ -19,8 +19,10 @@ EOL
 
 sed -i '/^passwd:/ s/$/ winbind/' /etc/nsswitch.conf
 sed -i '/^group:/ s/$/ winbind/' /etc/nsswitch.conf
+sed -i '/^passwd:/ s/$/ winbind/' /usr/share/libc-bin/nsswitch.conf
+sed -i '/^group:/ s/$/ winbind/' /usr/share/libc-bin/nsswitch.conf
 
-cat > /etc/krb5.conf << EOL
+cat > /usr/local/samba/share/setup/krb5.conf << EOL
 [libdefaults]
     default_realm = ${DNSDOMAIN}
     dns_lookup_realm = false
