@@ -112,7 +112,7 @@ net ads join -U"${AD_USERNAME}"%"${AD_PASSWORD}"
 
 smbd -D
 nmbd -D
-winbind -D
+winbindd -D
 
 until getent passwd "${DOMAINNAME}\\${AD_USERNAME}"; do sleep 1; done
 
