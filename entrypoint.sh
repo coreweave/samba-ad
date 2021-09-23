@@ -123,8 +123,8 @@ chmod 0770 /share/samba/${VOLUME}
 
 net rpc rights grant "${DOMAINNAME}\\Domain Admins" SeDiskOperatorPrivilege   -U"${AD_USERNAME}"%"${AD_PASSWORD}"
 
-service smbd stop
-service nmbd stop
-service winbind stop
+pkill -INT smbd
+pkill -INT nmbd
+pkill -INT winbindd
 
 exec "$@"
