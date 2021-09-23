@@ -113,7 +113,7 @@ RUN tar -zxf samba-4.15.0.tar.gz
 
 RUN wget https://gitlab.com/samba-team/samba/-/merge_requests/1908.patch -O /tmp/patch.txt
 
-RUN cd samba-4.15.0
+WORKDIR /samba-4.15.0
 
 RUN patch -p 1 < /tmp/patch.txt
 
