@@ -121,6 +121,8 @@ RUN ./configure
 
 RUN make
 
+RUN sed '1s@^.*$@#!/usr/bin/python3@' -i ./bin/default/source4/scripting/bin/samba-gpupdate.inst
+
 RUN make install
 
 ENV PATH=/usr/local/samba/bin/:/usr/local/samba/sbin/:$PATH
@@ -129,7 +131,11 @@ WORKDIR /
 
 RUN rm -rf /samba-4.15.0
 
-RUN ln -s /usr/local/samba/lib/* /lib/ -f || true
+RUN mv -v /usr/local/samba/lib/libnss_win{s,bind}.so.*  /lib
+
+RUN ln -v -sf ../../lib/libnss_winbind.so.2 /usr/local/samba/lib/libnss_winbind.so
+
+RUN ln -v -sf ../../lib/libnss_wins.so.2    /usr/local/samba/lib/libnss_wins.so 
 
 COPY entrypoint.sh /entrypoint.sh
 COPY supervisord.conf /etc/supervisor/conf.d/supervisord.conf
