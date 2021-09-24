@@ -4,6 +4,7 @@
 #service nmbd stop
 #service winbind stop
 
+rm /etc/samba/smb.conf
 rm /usr/local/samba/etc/smb.conf
 rm /usr/local/samba/share/setup/krb5.conf
 
@@ -74,7 +75,7 @@ cat > /usr/local/samba/etc/smb.conf << EOL
     map acl inherit = Yes
     #store dos attributes = Yes
     acl_xattr:ignore system acls = yes
-    xattr:unprotected_ntacl_name = yes
+    xattr:unprotected_ntacl_name = user.NTACL
 
     # Share Setting Globally
     #unix extensions = no
