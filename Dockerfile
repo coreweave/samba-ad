@@ -1,6 +1,6 @@
 FROM ubuntu:latest
 
-ENV TERM=xterm
+SHELL ["/bin/bash", "-c"]
 
 ENV DEBIAN_FRONTEND noninteractive
 
