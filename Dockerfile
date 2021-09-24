@@ -107,9 +107,15 @@ RUN apt-get clean && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
 
 RUN env --unset=DEBIAN_FRONTEND
 
-RUN git clone https://gitlab.com/samba-team/devel/samba.git
+RUN wget https://download.samba.org/pub/samba/stable/samba-4.15.0.tar.gz
 
-WORKDIR /samba
+RUN tar -zxf samba-4.15.0.tar.gz
+
+RUN wget https://gitlab.com/samba-team/samba/-/merge_requests/1908.patch -O /tmp/patch.txt
+
+WORKDIR /samba-4.15.0
+
+RUN patch -p 1 < /tmp/patch.txt
 
 RUN ./configure
 
@@ -123,7 +129,7 @@ ENV PATH=/usr/local/samba/bin/:/usr/local/samba/sbin/:$PATH
 
 WORKDIR /
 
-RUN rm -rf /samba
+RUN rm -rf /samba-4.15.0
 
 RUN mv -v /usr/local/samba/lib/libnss_win{s,bind}.so.*  /lib
 
