@@ -5,7 +5,6 @@
 #service winbind stop
 
 rm /etc/samba/smb.conf
-rm /usr/local/samba/etc/smb.conf
 rm /usr/local/samba/share/setup/krb5.conf
 
 cat > /etc/hosts << EOL
