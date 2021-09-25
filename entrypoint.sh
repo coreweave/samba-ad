@@ -42,14 +42,14 @@ cat > /usr/local/samba/etc/smb.conf << EOL
 
     dedicated keytab file = /etc/krb5.keytab
     kerberos method = secrets and keytab
-    #server string = Data %h
+    server string = Data %h
 
     winbind use default domain = yes
-    #winbind expand groups = 4
-    #winbind nss info = rfc2307
-    #winbind refresh tickets = Yes
-    #winbind offline logon = yes
-    #winbind normalize names = Yes
+    winbind expand groups = 4
+    winbind nss info = rfc2307
+    winbind refresh tickets = Yes
+    winbind offline logon = yes
+    winbind normalize names = Yes
 
     ## map ids outside of domain to tdb files.
     idmap config *:backend = tdb
@@ -60,11 +60,11 @@ cat > /usr/local/samba/etc/smb.conf << EOL
     template shell = /bin/bash
     template homedir = /home/${DOMAINNAME}/%U
 
-    #domain master = no
-    #local master = no
-    #preferred master = no
-    #os level = 20
-    #map to guest = bad user
+    domain master = no
+    local master = no
+    preferred master = no
+    os level = 20
+    map to guest = bad user
     #host msdfs = no
 
     # user Administrator workaround, without it you are unable to set privileges
@@ -78,10 +78,10 @@ cat > /usr/local/samba/etc/smb.conf << EOL
     xattr:unprotected_ntacl_name = user.NTACL
 
     # Share Setting Globally
-    #unix extensions = no
-    #reset on zero vc = yes
-    #veto files = /.bash_logout/.bash_profile/.bash_history/.bashrc/
-    #hide unreadable = yes
+    unix extensions = no
+    reset on zero vc = yes
+    veto files = /.bash_logout/.bash_profile/.bash_history/.bashrc/
+    hide unreadable = yes
 
     # disable printing completely
     load printers = no
@@ -90,25 +90,30 @@ cat > /usr/local/samba/etc/smb.conf << EOL
     disable spoolss = yes
 
     # Security
-    #client ipc max protocol = SMB3
-    #client ipc min protocol = SMB2_10
-    #client max protocol = SMB3
-    #client min protocol = SMB2_10
-    #server max protocol = SMB3
-    #server min protocol = SMB2_10
+    client ipc max protocol = SMB3
+    client ipc min protocol = SMB2_10
+    client max protocol = SMB3
+    client min protocol = SMB2_10
+    server max protocol = SMB3
+    server min protocol = SMB2_10
 
     # Time Machine
-    #fruit:delete_empty_adfiles = yes
-    #fruit:time machine = yes
-    #fruit:veto_appledouble = no
-    #fruit:wipe_intentionally_left_blank_rfork = yes
+    fruit:delete_empty_adfiles = yes
+    fruit:time machine = yes
+    fruit:veto_appledouble = no
+    fruit:wipe_intentionally_left_blank_rfork = yes
+    
+    #SMB Multichannel
+    server multi channel support = yes
+    aio read size = 1
+    aio write size = 1
 
 [${VOLUME}]
    path = /share/samba/${VOLUME}
    read only = no
-   #guest ok = no
-   #veto files = /.apdisk/.DS_Store/.TemporaryItems/.Trashes/desktop.ini/ehthumbs.db/Network Trash Folder/Temporary Items/Thumbs.db/
-   #delete veto files = yes
+   guest ok = no
+   veto files = /.apdisk/.DS_Store/.TemporaryItems/.Trashes/desktop.ini/ehthumbs.db/Network Trash Folder/Temporary Items/Thumbs.db/
+   delete veto files = yes
 EOL
 
 net ads join -U"${AD_USERNAME}"%"${AD_PASSWORD}"
