@@ -102,19 +102,25 @@ cat > /usr/local/samba/etc/smb.conf << EOL
     fruit:time machine = yes
     fruit:veto_appledouble = no
     fruit:wipe_intentionally_left_blank_rfork = yes
-    
+
     #SMB Multichannel
     server multi channel support = yes
     aio read size = 1
     aio write size = 1
-
-[${VOLUME}]
-   path = /share/samba/${VOLUME}
-   read only = no
-   guest ok = no
-   veto files = /.apdisk/.DS_Store/.TemporaryItems/.Trashes/desktop.ini/ehthumbs.db/Network Trash Folder/Temporary Items/Thumbs.db/
-   delete veto files = yes
 EOL
+
+for var in ${!SHARE@};
+do
+echo "" >> /usr/local/samba/etc/smb.conf
+echo "[${!var}]" >> /usr/local/samba/etc/smb.conf
+echo "   path = /share/samba/${!var}" >> /usr/local/samba/etc/smb.conf
+echo "   read only = no"  >> /usr/local/samba/etc/smb.conf
+echo "   guest ok = no" >> /usr/local/samba/etc/smb.conf
+echo "   veto files = /.apdisk/.DS_Store/.TemporaryItems/.Trashes/desktop.ini/ehthumbs.db/Network Trash Folder/Temporary Items/Thumbs.db" >> /usr/local/samba/etc/smb.conf
+echo "   delete veto files = yes" >> /usr/local/samba/etc/smb.conf;
+done
+
+echo "" >> /usr/local/samba/etc/smb.conf
 
 net ads join -U"${AD_USERNAME}"%"${AD_PASSWORD}"
 
@@ -126,8 +132,11 @@ until getent passwd "${DOMAINNAME}\\${AD_USERNAME}"; do sleep 1; done
 
 net ads dns register -U"${AD_USERNAME}"%"${AD_PASSWORD}"
 
-chown "${DOMAINNAME}\\Domain Admins":"${DOMAINNAME}\\Domain Admins" /share/samba/${VOLUME}
-chmod 0770 /share/samba/${VOLUME}
+for var in ${!SHARE@};
+do
+chown "${DOMAINNAME}\\Domain Admins":"${DOMAINNAME}\\Domain Admins" /share/samba/${!var}
+chmod 0770 /share/samba/${!var};
+done
 
 net rpc rights grant "${DOMAINNAME}\\Domain Admins" SeDiskOperatorPrivilege   -U"${AD_USERNAME}"%"${AD_PASSWORD}"
 
