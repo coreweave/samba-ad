@@ -1,0 +1,648 @@
+From c10b8eec7976fe2007e800f7a1400f212f0cf239 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?G=C3=BCnther=20Deschner?= <gd@samba.org>
+Date: Wed, 18 Nov 2020 17:20:15 +0100
+Subject: [PATCH 01/10] s3-modules: add get_xattr_acl_name() helper, defaults
+ to security.NTACL
+
+Guenther
+
+Signed-off-by: Guenther Deschner <gd@samba.org>
+---
+ source3/modules/vfs_acl_common.c | 8 ++++++++
+ source3/modules/vfs_acl_common.h | 2 +-
+ 2 files changed, 9 insertions(+), 1 deletion(-)
+
+diff --git a/source3/modules/vfs_acl_common.c b/source3/modules/vfs_acl_common.c
+index 81e1116b20b..b0c98bf5ab9 100644
+--- a/source3/modules/vfs_acl_common.c
++++ b/source3/modules/vfs_acl_common.c
+@@ -1180,3 +1180,11 @@ int fchmod_acl_module_common(struct vfs_handle_struct *handle,
+ 	}
+ 	return 0;
+ }
++
++
++const char *get_xattr_acl_name(int service)
++{
++	return lp_parm_const_string(service,
++				    "xattr", "unprotected_ntacl_name",
++				    XATTR_NTACL_NAME);
++}
+diff --git a/source3/modules/vfs_acl_common.h b/source3/modules/vfs_acl_common.h
+index c4b4fb9c1b3..745ede61b80 100644
+--- a/source3/modules/vfs_acl_common.h
++++ b/source3/modules/vfs_acl_common.h
+@@ -85,6 +85,6 @@ NTSTATUS fset_nt_acl_common(
+         uint32_t security_info_sent,
+ 	const struct security_descriptor *orig_psd);
+ 
+-
++const char *get_xattr_acl_name(int service);
+ 
+ #endif
+-- 
+GitLab
+
+
+From cc97d569eff0024eb24393de48d3d5ef2f8b73d3 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?G=C3=BCnther=20Deschner?= <gd@samba.org>
+Date: Wed, 18 Nov 2020 17:21:38 +0100
+Subject: [PATCH 02/10] s3-modules: use get_xattr_acl_name() in acl_xattr vfs
+ module
+
+Guenther
+
+Signed-off-by: Guenther Deschner <gd@samba.org>
+---
+ source3/modules/vfs_acl_xattr.c | 11 +++++++----
+ 1 file changed, 7 insertions(+), 4 deletions(-)
+
+diff --git a/source3/modules/vfs_acl_xattr.c b/source3/modules/vfs_acl_xattr.c
+index ad11e20b7dc..c2cfa7d0c1b 100644
+--- a/source3/modules/vfs_acl_xattr.c
++++ b/source3/modules/vfs_acl_xattr.c
+@@ -67,6 +67,7 @@ static NTSTATUS fget_acl_blob(TALLOC_CTX *ctx,
+ 	uint8_t *val = NULL;
+ 	uint8_t *tmp;
+ 	ssize_t sizeret;
++	const char *xattr_name = get_xattr_acl_name(SNUM(handle->conn));
+ 
+ 	ZERO_STRUCTP(pblob);
+ 
+@@ -80,7 +81,7 @@ static NTSTATUS fget_acl_blob(TALLOC_CTX *ctx,
+ 	val = tmp;
+ 
+ 	sizeret =
+-	    getxattr_do(handle, fsp, XATTR_NTACL_NAME, val, size);
++	    getxattr_do(handle, fsp, xattr_name, val, size);
+ 
+ 	if (sizeret >= 0) {
+ 		pblob->data = val;
+@@ -94,7 +95,7 @@ static NTSTATUS fget_acl_blob(TALLOC_CTX *ctx,
+ 
+ 	/* Too small, try again. */
+ 	sizeret =
+-	    getxattr_do(handle, fsp, XATTR_NTACL_NAME, NULL, 0);
++	    getxattr_do(handle, fsp, xattr_name, NULL, 0);
+ 	if (sizeret < 0) {
+ 		goto err;
+ 	}
+@@ -126,12 +127,13 @@ static NTSTATUS store_acl_blob_fsp(vfs_handle_struct *handle,
+ {
+ 	int ret;
+ 	int saved_errno = 0;
++	const char *xattr_name = get_xattr_acl_name(SNUM(handle->conn));
+ 
+ 	DEBUG(10,("store_acl_blob_fsp: storing blob length %u on file %s\n",
+ 		  (unsigned int)pblob->length, fsp_str_dbg(fsp)));
+ 
+ 	become_root();
+-	ret = SMB_VFS_FSETXATTR(fsp, XATTR_NTACL_NAME,
++	ret = SMB_VFS_FSETXATTR(fsp, xattr_name,
+ 			pblob->data, pblob->length, 0);
+ 	if (ret) {
+ 		saved_errno = errno;
+@@ -160,6 +162,7 @@ static int sys_acl_set_fd_xattr(vfs_handle_struct *handle,
+ 	struct acl_common_fsp_ext *ext = (struct acl_common_fsp_ext *)
+ 		VFS_FETCH_FSP_EXTENSION(handle, fsp);
+ 	int ret;
++	const char *xattr_name = get_xattr_acl_name(SNUM(handle->conn));
+ 
+ 	ret = SMB_VFS_NEXT_SYS_ACL_SET_FD(handle,
+ 					  fsp,
+@@ -174,7 +177,7 @@ static int sys_acl_set_fd_xattr(vfs_handle_struct *handle,
+ 	}
+ 
+ 	become_root();
+-	SMB_VFS_FREMOVEXATTR(fsp, XATTR_NTACL_NAME);
++	SMB_VFS_FREMOVEXATTR(fsp, xattr_name);
+ 	unbecome_root();
+ 
+ 	return 0;
+-- 
+GitLab
+
+
+From ae1c63ed11d40342200bb232ce6a0c897be2e682 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?G=C3=BCnther=20Deschner?= <gd@samba.org>
+Date: Thu, 9 Sep 2021 16:11:33 +0200
+Subject: [PATCH 03/10] s3-smbd: pass down service to samba_private_attr_name()
+
+Guenther
+
+Signed-off-by: Guenther Deschner <gd@samba.org>
+---
+ source3/smbd/proto.h  | 3 ++-
+ source3/smbd/trans2.c | 3 ++-
+ 2 files changed, 4 insertions(+), 2 deletions(-)
+
+diff --git a/source3/smbd/proto.h b/source3/smbd/proto.h
+index bf7401f5191..9717e51f3a2 100644
+--- a/source3/smbd/proto.h
++++ b/source3/smbd/proto.h
+@@ -1198,7 +1198,8 @@ NTSTATUS refuse_symlink_fsp(const struct files_struct *fsp);
+ NTSTATUS check_access_fsp(struct files_struct *fsp,
+ 			  uint32_t access_mask);
+ uint64_t smb_roundup(connection_struct *conn, uint64_t val);
+-bool samba_private_attr_name(const char *unix_ea_name);
++bool samba_private_attr_name(const char *unix_ea_name,
++			     int service);
+ NTSTATUS get_ea_value_fsp(TALLOC_CTX *mem_ctx,
+ 			  files_struct *fsp,
+ 			  const char *ea_name,
+diff --git a/source3/smbd/trans2.c b/source3/smbd/trans2.c
+index a6bd232f679..8cf94cc1611 100644
+--- a/source3/smbd/trans2.c
++++ b/source3/smbd/trans2.c
+@@ -195,7 +195,8 @@ uint64_t smb_roundup(connection_struct *conn, uint64_t val)
+  Refuse to allow clients to overwrite our private xattrs.
+ ****************************************************************************/
+ 
+-bool samba_private_attr_name(const char *unix_ea_name)
++bool samba_private_attr_name(const char *unix_ea_name,
++			     int service)
+ {
+ 	static const char * const prohibited_ea_names[] = {
+ 		SAMBA_POSIX_INHERITANCE_EA_NAME,
+-- 
+GitLab
+
+
+From ae93afe2e140c8af992df8df90f8bef0a0775fb2 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?G=C3=BCnther=20Deschner?= <gd@samba.org>
+Date: Wed, 18 Nov 2020 17:24:50 +0100
+Subject: [PATCH 04/10] s3-smbd: use get_xattr_acl_name() in
+ samba_private_attr_name()
+
+Guenther
+
+Signed-off-by: Guenther Deschner <gd@samba.org>
+---
+ source3/modules/vfs_streams_xattr.c |  3 ++-
+ source3/smbd/trans2.c               | 12 ++++++++----
+ 2 files changed, 10 insertions(+), 5 deletions(-)
+
+diff --git a/source3/modules/vfs_streams_xattr.c b/source3/modules/vfs_streams_xattr.c
+index 558bf228794..71d572298b8 100644
+--- a/source3/modules/vfs_streams_xattr.c
++++ b/source3/modules/vfs_streams_xattr.c
+@@ -723,7 +723,8 @@ static NTSTATUS walk_xattr_streams(vfs_handle_struct *handle,
+ 		 */
+ 		if (strncasecmp_m(names[i], SAMBA_XATTR_DOSSTREAM_PREFIX,
+ 				  strlen(SAMBA_XATTR_DOSSTREAM_PREFIX)) != 0) {
+-			if (samba_private_attr_name(names[i])) {
++			if (samba_private_attr_name(names[i],
++						    SNUM(handle->conn))) {
+ 				continue;
+ 			}
+ 		}
+diff --git a/source3/smbd/trans2.c b/source3/smbd/trans2.c
+index 8cf94cc1611..5569e77aea6 100644
+--- a/source3/smbd/trans2.c
++++ b/source3/smbd/trans2.c
+@@ -45,6 +45,7 @@
+ #include "smb1_utils.h"
+ #include "libcli/smb/smb2_posix.h"
+ #include "lib/util/string_wrappers.h"
++#include "modules/vfs_acl_common.h"
+ 
+ #define DIR_ENTRY_SAFETY_MARGIN 4096
+ 
+@@ -202,12 +203,15 @@ bool samba_private_attr_name(const char *unix_ea_name,
+ 		SAMBA_POSIX_INHERITANCE_EA_NAME,
+ 		SAMBA_XATTR_DOS_ATTRIB,
+ 		SAMBA_XATTR_MARKER,
+-		XATTR_NTACL_NAME,
+ 		NULL
+ 	};
+-
++	const char *xattr_name = get_xattr_acl_name(service);
+ 	int i;
+ 
++	if (strequal(xattr_name, unix_ea_name)) {
++		return true;
++	}
++
+ 	for (i = 0; prohibited_ea_names[i]; i++) {
+ 		if (strequal( prohibited_ea_names[i], unix_ea_name))
+ 			return true;
+@@ -449,7 +453,7 @@ static NTSTATUS get_ea_list_from_fsp(TALLOC_CTX *mem_ctx,
+ 		fstring dos_ea_name;
+ 
+ 		if (strnequal(names[i], "system.", 7)
+-		    || samba_private_attr_name(names[i]))
++		    || samba_private_attr_name(names[i], SNUM(fsp->conn)))
+ 			continue;
+ 
+ 		/*
+@@ -782,7 +786,7 @@ NTSTATUS set_ea(connection_struct *conn, files_struct *fsp,
+ 
+ 		DEBUG(10,("set_ea: ea_name %s ealen = %u\n", unix_ea_name, (unsigned int)ea_list->ea.value.length));
+ 
+-		if (samba_private_attr_name(unix_ea_name)) {
++		if (samba_private_attr_name(unix_ea_name, SNUM(conn))) {
+ 			DEBUG(10,("set_ea: ea name %s is a private Samba name.\n", unix_ea_name));
+ 			return NT_STATUS_ACCESS_DENIED;
+ 		}
+-- 
+GitLab
+
+
+From eb519a4fe1b0d9529e02b4b929e801d602476629 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?G=C3=BCnther=20Deschner?= <gd@samba.org>
+Date: Wed, 18 Nov 2020 18:19:00 +0100
+Subject: [PATCH 05/10] s4-ntvfs: add xattr_ntacl_name()
+
+Guenther
+
+Signed-off-by: Guenther Deschner <gd@samba.org>
+---
+ source4/ntvfs/posix/wscript_build |  2 +-
+ source4/ntvfs/posix/xattr_util.c  | 37 +++++++++++++++++++++++++++++++
+ source4/ntvfs/posix/xattr_util.h  |  1 +
+ 3 files changed, 39 insertions(+), 1 deletion(-)
+ create mode 100644 source4/ntvfs/posix/xattr_util.c
+ create mode 100644 source4/ntvfs/posix/xattr_util.h
+
+diff --git a/source4/ntvfs/posix/wscript_build b/source4/ntvfs/posix/wscript_build
+index 649dea68adf..01a7caad8e7 100644
+--- a/source4/ntvfs/posix/wscript_build
++++ b/source4/ntvfs/posix/wscript_build
+@@ -2,7 +2,7 @@
+ 
+ if bld.CONFIG_SET('WITH_NTVFS_FILESERVER'):
+     bld.SAMBA_SUBSYSTEM('pvfs_acl',
+-	                source='pvfs_acl.c',
++	                source='pvfs_acl.c xattr_util.c',
+ 	                autoproto='vfs_acl_proto.h',
+ 	                deps='events samba-modules',
+     )
+diff --git a/source4/ntvfs/posix/xattr_util.c b/source4/ntvfs/posix/xattr_util.c
+new file mode 100644
+index 00000000000..e0986425a2b
+--- /dev/null
++++ b/source4/ntvfs/posix/xattr_util.c
+@@ -0,0 +1,37 @@
++/*
++   Unix SMB/CIFS implementation.
++
++   POSIX NTVFS backend - NT ACLs in xattrs
++
++   Copyright (C) Andrew Tridgell 2006
++
++   This program is free software; you can redistribute it and/or modify
++   it under the terms of the GNU General Public License as published by
++   the Free Software Foundation; either version 3 of the License, or
++   (at your option) any later version.
++
++   This program is distributed in the hope that it will be useful,
++   but WITHOUT ANY WARRANTY; without even the implied warranty of
++   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++   GNU General Public License for more details.
++
++   You should have received a copy of the GNU General Public License
++   along with this program.  If not, see <http://www.gnu.org/licenses/>.
++*/
++
++#include "includes.h"
++#include "xattr_util.h"
++#include "librpc/gen_ndr/ndr_xattr.h"
++#include "param/param.h"
++
++const char *xattr_ntacl_name(struct loadparm_context *lp_ctx)
++{
++	const char *val;
++
++	val = lpcfg_parm_string(lp_ctx, NULL, "xattr", "unprotected_ntacl_name");
++	if (val == NULL) {
++		val = XATTR_NTACL_NAME;
++	}
++
++	return val;
++}
+diff --git a/source4/ntvfs/posix/xattr_util.h b/source4/ntvfs/posix/xattr_util.h
+new file mode 100644
+index 00000000000..dc9e88b5866
+--- /dev/null
++++ b/source4/ntvfs/posix/xattr_util.h
+@@ -0,0 +1 @@
++const char *xattr_ntacl_name(struct loadparm_context *lp_ctx);
+-- 
+GitLab
+
+
+From f2533398988d3b0309e1c26afd92483e3d20a5e5 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?G=C3=BCnther=20Deschner?= <gd@samba.org>
+Date: Wed, 18 Nov 2020 18:25:31 +0100
+Subject: [PATCH 06/10] s4-ntvfs: use xattr_ntacl_name() in pvfs_acl_xattr
+ module
+
+Guenther
+
+Signed-off-by: Guenther Deschner <gd@samba.org>
+---
+ source4/ntvfs/posix/pvfs_acl_xattr.c | 9 ++++++---
+ 1 file changed, 6 insertions(+), 3 deletions(-)
+
+diff --git a/source4/ntvfs/posix/pvfs_acl_xattr.c b/source4/ntvfs/posix/pvfs_acl_xattr.c
+index 1f569ca43f3..293c47f7f12 100644
+--- a/source4/ntvfs/posix/pvfs_acl_xattr.c
++++ b/source4/ntvfs/posix/pvfs_acl_xattr.c
+@@ -23,6 +23,7 @@
+ #include "vfs_posix.h"
+ #include "../lib/util/unix_privs.h"
+ #include "librpc/gen_ndr/ndr_xattr.h"
++#include "xattr_util.h"
+ 
+ NTSTATUS pvfs_acl_xattr_init(TALLOC_CTX *);
+ 
+@@ -35,6 +36,7 @@ static NTSTATUS pvfs_acl_load_xattr(struct pvfs_state *pvfs, struct pvfs_filenam
+ {
+ 	NTSTATUS status;
+ 	struct xattr_NTACL *acl;
++	const char *xattr_name = xattr_ntacl_name(pvfs->ntvfs->ctx->lp_ctx);
+ 
+ 	if (!(pvfs->flags & PVFS_FLAG_XATTR_ENABLE)) {
+ 		return NT_STATUS_NOT_FOUND;
+@@ -44,7 +46,7 @@ static NTSTATUS pvfs_acl_load_xattr(struct pvfs_state *pvfs, struct pvfs_filenam
+ 	NT_STATUS_HAVE_NO_MEMORY(acl);
+ 
+ 	status = pvfs_xattr_ndr_load(pvfs, mem_ctx, name->full_name, fd, 
+-				     XATTR_NTACL_NAME,
++				     xattr_name,
+ 				     acl, (void *) ndr_pull_xattr_NTACL);
+ 
+ 	if (!NT_STATUS_IS_OK(status)) {
+@@ -71,6 +73,7 @@ static NTSTATUS pvfs_acl_save_xattr(struct pvfs_state *pvfs, struct pvfs_filenam
+ 	NTSTATUS status;
+ 	void *privs;
+ 	struct xattr_NTACL acl;
++	const char *xattr_name = xattr_ntacl_name(pvfs->ntvfs->ctx->lp_ctx);
+ 
+ 	if (!(pvfs->flags & PVFS_FLAG_XATTR_ENABLE)) {
+ 		return NT_STATUS_OK;
+@@ -79,11 +82,11 @@ static NTSTATUS pvfs_acl_save_xattr(struct pvfs_state *pvfs, struct pvfs_filenam
+ 	acl.version = 1;
+ 	acl.info.sd = sd;
+ 
+-	/* this xattr is in the "system" namespace, so we need
++	/* this xattr is usually in the "system" namespace, so we need
+ 	   admin privileges to set it */
+ 	privs = root_privileges();
+ 	status = pvfs_xattr_ndr_save(pvfs, name->full_name, fd, 
+-				     XATTR_NTACL_NAME, 
++				     xattr_name,
+ 				     &acl, (void *) ndr_push_xattr_NTACL);
+ 	talloc_free(privs);
+ 	return status;
+-- 
+GitLab
+
+
+From f9df748363891dffa2efae639f5c65b0263e7610 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?G=C3=BCnther=20Deschner?= <gd@samba.org>
+Date: Wed, 18 Nov 2020 18:26:43 +0100
+Subject: [PATCH 07/10] s4-ntvfs: use xattr_ntacl_name() in pvfs_xattr module
+
+Guenther
+
+Signed-off-by: Guenther Deschner <gd@samba.org>
+---
+ source4/ntvfs/posix/pvfs_xattr.c | 9 ++++++---
+ 1 file changed, 6 insertions(+), 3 deletions(-)
+
+diff --git a/source4/ntvfs/posix/pvfs_xattr.c b/source4/ntvfs/posix/pvfs_xattr.c
+index ab88d89d10b..b65cf45ff6a 100644
+--- a/source4/ntvfs/posix/pvfs_xattr.c
++++ b/source4/ntvfs/posix/pvfs_xattr.c
+@@ -25,6 +25,7 @@
+ #include "librpc/gen_ndr/ndr_xattr.h"
+ #include "param/param.h"
+ #include "ntvfs/posix/posix_eadb_proto.h"
++#include "ntvfs/posix/xattr_util.h"
+ 
+ /*
+   pull a xattr as a blob
+@@ -359,12 +360,13 @@ NTSTATUS pvfs_acl_load(struct pvfs_state *pvfs, struct pvfs_filename *name, int
+ 		       struct xattr_NTACL *acl)
+ {
+ 	NTSTATUS status;
++	const char *xattr_name = xattr_ntacl_name(pvfs->ntvfs->ctx->lp_ctx);
+ 	ZERO_STRUCTP(acl);
+ 	if (!(pvfs->flags & PVFS_FLAG_XATTR_ENABLE)) {
+ 		return NT_STATUS_NOT_FOUND;
+ 	}
+ 	status = pvfs_xattr_ndr_load(pvfs, acl, name->full_name, fd, 
+-				     XATTR_NTACL_NAME,
++				     xattr_name,
+ 				     acl, 
+ 				     (void *) ndr_pull_xattr_NTACL);
+ 	return status;
+@@ -378,16 +380,17 @@ NTSTATUS pvfs_acl_save(struct pvfs_state *pvfs, struct pvfs_filename *name, int
+ {
+ 	NTSTATUS status;
+ 	void *privs;
++	const char *xattr_name = xattr_ntacl_name(pvfs->ntvfs->ctx->lp_ctx);
+ 
+ 	if (!(pvfs->flags & PVFS_FLAG_XATTR_ENABLE)) {
+ 		return NT_STATUS_OK;
+ 	}
+ 
+-	/* this xattr is in the "system" namespace, so we need
++	/* this xattr is usually in the "system" namespace, so we need
+ 	   admin privileges to set it */
+ 	privs = root_privileges();
+ 	status = pvfs_xattr_ndr_save(pvfs, name->full_name, fd, 
+-				     XATTR_NTACL_NAME, 
++				     xattr_name,
+ 				     acl, 
+ 				     (void *) ndr_push_xattr_NTACL);
+ 	talloc_free(privs);
+-- 
+GitLab
+
+
+From e263aebcd68c8955cc5660732d3a13f8c16a6912 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?G=C3=BCnther=20Deschner?= <gd@samba.org>
+Date: Thu, 9 Sep 2021 15:14:23 +0200
+Subject: [PATCH 08/10] python: query parametric ntacls option for the xattr
+ name
+
+Guenther
+
+Signed-off-by: Guenther Deschner <gd@samba.org>
+---
+ python/samba/ntacls.py | 17 +++++++++++------
+ 1 file changed, 11 insertions(+), 6 deletions(-)
+
+diff --git a/python/samba/ntacls.py b/python/samba/ntacls.py
+index 89e64b7dc5a..338a87ade36 100644
+--- a/python/samba/ntacls.py
++++ b/python/samba/ntacls.py
+@@ -89,6 +89,9 @@ def getdosinfo(lp, file):
+     return ndr_unpack(xattr.DOSATTRIB, attribute)
+ 
+ 
++def getntacl_xattr_name(lp):
++    return lp.get("xattr:unprotected_ntacl_name") or xattr.XATTR_NTACL_NAME
++
+ def getntacl(lp,
+              file,
+              session_info,
+@@ -97,20 +100,21 @@ def getntacl(lp,
+              direct_db_access=True,
+              service=None):
+     if direct_db_access:
++        xattr_name = getntacl_xattr_name(lp)
+         (backend_obj, dbname) = checkset_backend(lp, backend, eadbfile)
+         if dbname is not None:
+             try:
+                 attribute = backend_obj.wrap_getxattr(dbname, file,
+-                                                      xattr.XATTR_NTACL_NAME)
++                                                      xattr_name)
+             except Exception:
+                 # FIXME: Don't catch all exceptions, just those related to opening
+                 # xattrdb
+                 print("Fail to open %s" % dbname)
+                 attribute = samba.xattr_native.wrap_getxattr(file,
+-                                                             xattr.XATTR_NTACL_NAME)
++                                                             xattr_name)
+         else:
+             attribute = samba.xattr_native.wrap_getxattr(file,
+-                                                         xattr.XATTR_NTACL_NAME)
++                                                         xattr_name)
+         ntacl = ndr_unpack(xattr.NTACL, attribute)
+         if ntacl.version == 1:
+             return ntacl.info
+@@ -211,18 +215,19 @@ def setntacl(lp, file, sddl, domsid, session_info,
+         ntacl = xattr.NTACL()
+         ntacl.version = 1
+         ntacl.info = sd
++        xattr_name = getntacl_xattr_name(lp)
+         if dbname is not None:
+             try:
+                 backend_obj.wrap_setxattr(dbname,
+-                                          file, xattr.XATTR_NTACL_NAME, ndr_pack(ntacl))
++                                          file, xattr_name, ndr_pack(ntacl))
+             except Exception:
+                 # FIXME: Don't catch all exceptions, just those related to opening
+                 # xattrdb
+                 print("Fail to open %s" % dbname)
+-                samba.xattr_native.wrap_setxattr(file, xattr.XATTR_NTACL_NAME,
++                samba.xattr_native.wrap_setxattr(file, xattr_name,
+                                                  ndr_pack(ntacl))
+         else:
+-            samba.xattr_native.wrap_setxattr(file, xattr.XATTR_NTACL_NAME,
++            samba.xattr_native.wrap_setxattr(file, xattr_name,
+                                              ndr_pack(ntacl))
+     else:
+         smbd.set_nt_acl(
+-- 
+GitLab
+
+
+From b125fd9460ca89d6bd9407515f8882d5b106d39d Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?G=C3=BCnther=20Deschner?= <gd@samba.org>
+Date: Thu, 9 Sep 2021 15:39:32 +0200
+Subject: [PATCH 09/10] python: pass down xattr names to copytree_with_xattrs()
+ in xattr module
+
+Guenther
+
+Signed-off-by: Guenther Deschner <gd@samba.org>
+---
+ python/samba/xattr.py | 13 +++++++------
+ 1 file changed, 7 insertions(+), 6 deletions(-)
+
+diff --git a/python/samba/xattr.py b/python/samba/xattr.py
+index 19eb67ab315..4098e0a5c98 100644
+--- a/python/samba/xattr.py
++++ b/python/samba/xattr.py
+@@ -20,23 +20,24 @@ import os
+ import samba.xattr_native
+ import shutil
+ 
++attr_list = [ "system.posix_acl_access", xattr.XATTR_NTACL_NAME ]
+ 
+-def copyattrs(frompath, topath):
++def copyattrs(frompath, topath, attrs=attr_list):
+     """Copy ACL related attributes from a path to another path."""
+-    for attr_name in (xattr.XATTR_NTACL_NAME, "system.posix_acl_access"):
++    for attr_name in attrs:
+         # Get the xattr attributes if any
+         try:
+             attribute = samba.xattr_native.wrap_getxattr(frompath,
+-                                                         xattr.XATTR_NTACL_NAME)
++                                                         attr_name)
+             samba.xattr_native.wrap_setxattr(topath,
+-                                             xattr.XATTR_NTACL_NAME,
++                                             attr_name,
+                                              attribute)
+         except Exception:
+             pass
+             # FIXME:Catch a specific exception
+ 
+ 
+-def copytree_with_xattrs(src, dst):
++def copytree_with_xattrs(src, dst, attrs=attr_list):
+     """Recursively copy a directory tree using shutil.copy2(), preserving xattrs.
+ 
+     The destination directory must not already exist.
+@@ -52,7 +53,7 @@ def copytree_with_xattrs(src, dst):
+             linkto = os.readlink(srcname)
+             os.symlink(linkto, dstname)
+         elif os.path.isdir(srcname):
+-            copytree_with_xattrs(srcname, dstname)
++            copytree_with_xattrs(srcname, dstname, attrs)
+         else:
+             # Will raise a SpecialFileError for unsupported file types
+             shutil.copy2(srcname, dstname)
+-- 
+GitLab
+
+
+From b2dea0e1e3ba157c53a3a44f0ca6f54697358fd0 Mon Sep 17 00:00:00 2001
+From: =?UTF-8?q?G=C3=BCnther=20Deschner?= <gd@samba.org>
+Date: Thu, 9 Sep 2021 16:42:30 +0200
+Subject: [PATCH 10/10] docs: document xattr:unprotected_ntacl_name
+
+Guenther
+
+Signed-off-by: Guenther Deschner <gd@samba.org>
+---
+ .../filename/xattrunprotectedntaclname.xml    | 23 +++++++++++++++++++
+ 1 file changed, 23 insertions(+)
+ create mode 100644 docs-xml/smbdotconf/filename/xattrunprotectedntaclname.xml
+
+diff --git a/docs-xml/smbdotconf/filename/xattrunprotectedntaclname.xml b/docs-xml/smbdotconf/filename/xattrunprotectedntaclname.xml
+new file mode 100644
+index 00000000000..730bd0f3b31
+--- /dev/null
++++ b/docs-xml/smbdotconf/filename/xattrunprotectedntaclname.xml
+@@ -0,0 +1,23 @@
++<samba:parameter name="xattr:unprotected_ntacl_name"
++                 context="S"
++                 type="string"
++                 xmlns:samba="http://www.samba.org/samba/DTD/samba-doc">
++<description>
++
++        <para>
++                This option allows to redefine the default location for the
++                NTACL extended attribute (xattr). If not set,
++                NTACL xattrs are still written to security.NTACL which is a
++                protected location, which means the content of
++                the security.NTACL attribute is not accessible from normal users
++                outside of Samba. When this option is set to use a
++                user-defined value, e.g. user.NTACL then any user can
++                potentially access and overwrite this information.
++                This option must only be used when this consequence is clearly
++                understood and when other means are established
++                to avoid compromising the ACL content.
++        </para>
++
++</description>
++<value type="default">security.NTACL</value>
++</samba:parameter>
+-- 
+GitLab
+

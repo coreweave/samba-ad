@@ -1,11 +1,11 @@
 #! /bin/bash
 
-service smbd stop
-service nmbd stop
-service winbind stop
+#service smbd stop
+#service nmbd stop
+#service winbind stop
 
 rm /etc/samba/smb.conf
-rm /etc/krb5.conf
+rm /usr/local/samba/share/setup/krb5.conf
 
 cat > /etc/hosts << EOL
 ::1     localhost ip6-localhost ip6-loopback
@@ -19,8 +19,10 @@ EOL
 
 sed -i '/^passwd:/ s/$/ winbind/' /etc/nsswitch.conf
 sed -i '/^group:/ s/$/ winbind/' /etc/nsswitch.conf
+sed -i '/^passwd:/ s/$/ winbind/' /usr/share/libc-bin/nsswitch.conf
+sed -i '/^group:/ s/$/ winbind/' /usr/share/libc-bin/nsswitch.conf
 
-cat > /etc/krb5.conf << EOL
+cat > /usr/local/samba/share/setup/krb5.conf << EOL
 [libdefaults]
     default_realm = ${DNSDOMAIN}
     dns_lookup_realm = false
@@ -31,7 +33,7 @@ cat > /etc/samba/user.map << EOL
 !root = ${DOMAINNAME}\Administrator ${DOMAINNAME}\administrator Administrator administrator
 EOL
 
-cat > /etc/samba/smb.conf << EOL
+cat > /usr/local/samba/etc/smb.conf << EOL
 [global]
     workgroup = ${DOMAINNAME}
     security = ADS
@@ -50,7 +52,7 @@ cat > /etc/samba/smb.conf << EOL
 
     ## map ids outside of domain to tdb files.
     idmap config *:backend = tdb
-    idmap config *:range = 2000-9999
+    idmap config *:range = 3000-9999
     ## map ids from the domain  the ranges may not overlap !
     idmap config ${DOMAINNAME} : backend = rid
     idmap config ${DOMAINNAME} : range = 10000-999999
@@ -62,7 +64,7 @@ cat > /etc/samba/smb.conf << EOL
     preferred master = no
     os level = 20
     map to guest = bad user
-    host msdfs = no
+    #host msdfs = no
 
     # user Administrator workaround, without it you are unable to set privileges
     username map = /etc/samba/user.map
@@ -70,7 +72,9 @@ cat > /etc/samba/smb.conf << EOL
     # For ACL support on domain member
     vfs objects = acl_xattr
     map acl inherit = Yes
-    store dos attributes = Yes
+    #store dos attributes = Yes
+    acl_xattr:ignore system acls = yes
+    xattr:unprotected_ntacl_name = user.NTACL
 
     # Share Setting Globally
     unix extensions = no
@@ -93,34 +97,50 @@ cat > /etc/samba/smb.conf << EOL
     server min protocol = SMB2_10
 
     # Time Machine
-	fruit:delete_empty_adfiles = yes
-	fruit:time machine = yes
-	fruit:veto_appledouble = no
-	fruit:wipe_intentionally_left_blank_rfork = yes
+    fruit:delete_empty_adfiles = yes
+    fruit:time machine = yes
+    fruit:veto_appledouble = no
+    fruit:wipe_intentionally_left_blank_rfork = yes
 
-[${VOLUME}]
-   path = /share/samba/${VOLUME}
-   browsable = yes
-   read only = no
-   guest ok = no
-   veto files = /.apdisk/.DS_Store/.TemporaryItems/.Trashes/desktop.ini/ehthumbs.db/Network Trash Folder/Temporary Items/Thumbs.db/
-   delete veto files = yes
+    #SMB Multichannel
+    server multi channel support = yes
+    aio read size = 1
+    aio write size = 1
 EOL
+
+for var in ${!SHARE@};
+do
+echo "" >> /usr/local/samba/etc/smb.conf
+echo "[${!var}]" >> /usr/local/samba/etc/smb.conf
+echo "   path = /share/samba/${!var}" >> /usr/local/samba/etc/smb.conf
+echo "   read only = no"  >> /usr/local/samba/etc/smb.conf
+echo "   guest ok = no" >> /usr/local/samba/etc/smb.conf
+echo "   veto files = /.apdisk/.DS_Store/.TemporaryItems/.Trashes/desktop.ini/ehthumbs.db/Network Trash Folder/Temporary Items/Thumbs.db" >> /usr/local/samba/etc/smb.conf
+echo "   delete veto files = yes" >> /usr/local/samba/etc/smb.conf;
+done
+
+echo "" >> /usr/local/samba/etc/smb.conf
 
 net ads join -U"${AD_USERNAME}"%"${AD_PASSWORD}"
 
+smbd -D
+nmbd -D
+winbindd -D
+
+until getent passwd "${DOMAINNAME}\\${AD_USERNAME}"; do sleep 1; done
+
 net ads dns register -U"${AD_USERNAME}"%"${AD_PASSWORD}"
 
-service smbd start
-service nmbd start
-service winbind start
+for var in ${!SHARE@};
+do
+chown "${DOMAINNAME}\\Domain Admins":"${DOMAINNAME}\\Domain Admins" /share/samba/${!var}
+chmod 0770 /share/samba/${!var};
+done
 
-until getent group "${DOMAINNAME}\\${GROUPNAME}"; do sleep 1; done
+net rpc rights grant "${DOMAINNAME}\\Domain Admins" SeDiskOperatorPrivilege   -U"${AD_USERNAME}"%"${AD_PASSWORD}"
 
-chown root:"${DOMAINNAME}\\${GROUPNAME}" /share/samba/${VOLUME}
-
-service smbd stop
-service nmbd stop
-service winbind stop
+pkill -INT smbd
+pkill -INT nmbd
+pkill -INT winbindd
 
 exec "$@"
