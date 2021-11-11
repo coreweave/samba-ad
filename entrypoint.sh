@@ -49,6 +49,8 @@ cat > /usr/local/samba/etc/smb.conf << EOL
     winbind refresh tickets = Yes
     winbind offline logon = yes
     winbind normalize names = Yes
+    winbind enum users = yes
+    winbind enum groups = yes
 
     ## map ids outside of domain to tdb files.
     idmap config *:backend = tdb
@@ -72,8 +74,8 @@ cat > /usr/local/samba/etc/smb.conf << EOL
     # For ACL support on domain member
     vfs objects = acl_xattr
     map acl inherit = Yes
-    #store dos attributes = Yes
-    acl_xattr:ignore system acls = yes
+    store dos attributes = Yes
+    acl_xattr:ignore system acls = no
     xattr:unprotected_ntacl_name = user.NTACL
 
     # Share Setting Globally
