@@ -131,7 +131,7 @@ winbindd -D
 
 until getent passwd "${DOMAINNAME}\\${AD_USERNAME}"; do sleep 1; done
 
-net ads dns register -U"${AD_USERNAME}"%"${AD_PASSWORD}"
+net ads dns register -U"${AD_USERNAME}"%"${AD_PASSWORD}" || exit 1
 
 for var in ${!SHARE@};
 do
