@@ -49,6 +49,8 @@ cat > /usr/local/samba/etc/smb.conf << EOL
     winbind refresh tickets = Yes
     winbind offline logon = yes
     winbind normalize names = Yes
+    winbind enum users = yes
+    winbind enum groups = yes
 
     ## map ids outside of domain to tdb files.
     idmap config *:backend = tdb
@@ -72,8 +74,8 @@ cat > /usr/local/samba/etc/smb.conf << EOL
     # For ACL support on domain member
     vfs objects = acl_xattr
     map acl inherit = Yes
-    #store dos attributes = Yes
-    acl_xattr:ignore system acls = yes
+    store dos attributes = Yes
+    acl_xattr:ignore system acls = no
     xattr:unprotected_ntacl_name = user.NTACL
 
     # Share Setting Globally
@@ -121,7 +123,7 @@ done
 
 echo "" >> /usr/local/samba/etc/smb.conf
 
-net ads join -U"${AD_USERNAME}"%"${AD_PASSWORD}"
+net ads join -U"${AD_USERNAME}"%"${AD_PASSWORD}" || exit 1
 
 smbd -D
 nmbd -D
@@ -129,7 +131,7 @@ winbindd -D
 
 until getent passwd "${DOMAINNAME}\\${AD_USERNAME}"; do sleep 1; done
 
-net ads dns register -U"${AD_USERNAME}"%"${AD_PASSWORD}"
+net ads dns register -U"${AD_USERNAME}"%"${AD_PASSWORD}" || exit 1
 
 for var in ${!SHARE@};
 do
