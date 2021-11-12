@@ -123,7 +123,7 @@ done
 
 echo "" >> /usr/local/samba/etc/smb.conf
 
-net ads join -U"${AD_USERNAME}"%"${AD_PASSWORD}"
+net ads join -U"${AD_USERNAME}"%"${AD_PASSWORD}" || exit 1
 
 smbd -D
 nmbd -D
