@@ -98,12 +98,6 @@ cat > /usr/local/samba/etc/smb.conf << EOL
     server max protocol = SMB3
     server min protocol = SMB2_10
 
-    # Time Machine
-    fruit:delete_empty_adfiles = yes
-    fruit:time machine = yes
-    fruit:veto_appledouble = no
-    fruit:wipe_intentionally_left_blank_rfork = yes
-
     #SMB Multichannel
     server multi channel support = yes
     aio read size = 1
