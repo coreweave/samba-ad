@@ -91,11 +91,8 @@ cat > /usr/local/samba/etc/smb.conf << EOL
     disable spoolss = yes
 
     # Security
-    client ipc max protocol = SMB3
     client ipc min protocol = SMB2_10
-    client max protocol = SMB3
     client min protocol = SMB2_10
-    server max protocol = SMB3
     server min protocol = SMB2_10
 
     #SMB Multichannel
