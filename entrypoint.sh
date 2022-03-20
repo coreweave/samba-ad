@@ -91,11 +91,8 @@ cat > /usr/local/samba/etc/smb.conf << EOL
     disable spoolss = yes
 
     # Security
-    client ipc max protocol = SMB3
     client ipc min protocol = SMB2_10
-    client max protocol = SMB3
     client min protocol = SMB2_10
-    server max protocol = SMB3
     server min protocol = SMB2_10
 
     #SMB Multichannel
@@ -111,8 +108,6 @@ echo "[${!var}]" >> /usr/local/samba/etc/smb.conf
 echo "   path = /share/samba/${!var}" >> /usr/local/samba/etc/smb.conf
 echo "   read only = no"  >> /usr/local/samba/etc/smb.conf
 echo "   guest ok = no" >> /usr/local/samba/etc/smb.conf
-echo "   veto files = /.apdisk/.DS_Store/.TemporaryItems/.Trashes/desktop.ini/ehthumbs.db/Network Trash Folder/Temporary Items/Thumbs.db" >> /usr/local/samba/etc/smb.conf
-echo "   delete veto files = yes" >> /usr/local/samba/etc/smb.conf;
 done
 
 echo "" >> /usr/local/samba/etc/smb.conf
