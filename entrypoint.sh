@@ -100,6 +100,10 @@ cat > /usr/local/samba/etc/smb.conf << EOL
     server multi channel support = yes
     aio read size = 1
     aio write size = 1
+    
+    #Tuning
+    min receivefile size = 16384
+    use sendfile = true
 EOL
 
 for var in ${!SHARE@};
