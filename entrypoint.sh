@@ -94,6 +94,7 @@ cat > /usr/local/samba/etc/smb.conf << EOL
     client ipc min protocol = SMB2_10
     client min protocol = SMB2_10
     server min protocol = SMB2_10
+    smb encrypt = auto
 
     #SMB Multichannel
     server multi channel support = yes
