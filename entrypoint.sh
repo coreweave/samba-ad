@@ -79,7 +79,7 @@ cat > /usr/local/samba/etc/smb.conf << EOL
     xattr:unprotected_ntacl_name = user.NTACL
 
     # Share Setting Globally
-    unix extensions = no
+    unix extensions = yes
     reset on zero vc = yes
     veto files = /.bash_logout/.bash_profile/.bash_history/.bashrc/
     hide unreadable = yes
