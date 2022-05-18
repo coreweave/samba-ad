@@ -66,7 +66,7 @@ cat > /usr/local/samba/etc/smb.conf << EOL
     preferred master = no
     os level = 20
     map to guest = bad user
-    #host msdfs = no
+    host msdfs = yes
 
     # user Administrator workaround, without it you are unable to set privileges
     username map = /etc/samba/user.map
