@@ -48,7 +48,7 @@ cat > /usr/local/samba/etc/smb.conf << EOL
     winbind nss info = rfc2307
     winbind refresh tickets = Yes
     winbind offline logon = yes
-    winbind normalize names = Yes
+    winbind normalize names = no
     winbind enum users = yes
     winbind enum groups = yes
 
