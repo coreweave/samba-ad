@@ -10,6 +10,8 @@ variables:
   TRIVY_IMAGE: $CI_REGISTRY_IMAGE:$CI_COMMIT_SHA
 
 Kanikoize:
+  tags:
+    - ord1-tenant
   stage: build
   image:
     name: gcr.io/kaniko-project/executor:debug
