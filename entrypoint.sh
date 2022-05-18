@@ -82,7 +82,7 @@ cat > /usr/local/samba/etc/smb.conf << EOL
     unix extensions = yes
     reset on zero vc = yes
     veto files = /.bash_logout/.bash_profile/.bash_history/.bashrc/
-    hide unreadable = yes
+    hide unreadable = no
 
     # disable printing completely
     load printers = no
