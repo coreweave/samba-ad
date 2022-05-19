@@ -1,4 +1,4 @@
-FROM ubuntu:focal
+FROM ubuntu:focal AS builder
 
 SHELL ["/bin/bash", "-c"]
 
@@ -131,17 +131,34 @@ RUN ln -v -sf ../../lib/libnss_winbind.so.2 /usr/local/samba/lib/libnss_winbind.
 
 RUN ln -v -sf ../../lib/libnss_wins.so.2    /usr/local/samba/lib/libnss_wins.so
 
-RUN ldconfig
-
-RUN apt-get autoremove -y
-
-RUN apt-get clean && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*
-
-RUN env --unset=DEBIAN_FRONTEND
-
 COPY entrypoint.sh /entrypoint.sh
+
 COPY supervisord.conf /etc/supervisor/conf.d/supervisord.conf
+
 RUN chmod +x /entrypoint.sh
+
+RUN tar -cf artifacts.tar /usr/local/ /etc/samba/ /entrypoint.sh /etc/supervisor/conf.d/supervisord.conf /lib/libnss_win{s,bind}.so.*
+
+FROM ubuntu:focal
+
+SHELL ["/bin/bash", "-c"]
+
+ENV DEBIAN_FRONTEND noninteractive
+
+COPY --from=builder /artifacts.tar /artifacts.tar
+
+RUN apt -y update && apt -y upgrade && \
+    apt -yqq --no-install-recommends install acl attr \
+	ntp dnsutils ldb-tools supervisor \
+	libbsd-dev libpopt-dev libreadline-dev libcap-dev libicu-dev libunwind-dev libjansson-dev liblmdb-dev libgpgme11-dev libarchive-dev \
+	libdbus-1-3 libexpat1 libgssapi-krb5-2 libk5crypto3 libkeyutils1 libkrb5-3 libkrb5support0 libldb2 libmpdec2 libpython3-stdlib libpython3.8  libpython3.8-minimal libpython3.8-stdlib libssl1.1 libtalloc2 libtdb1 libtevent0 libwbclient0 mime-support python3 python3-crypto python3-dnspython python3-ldb python3-minimal python3-samba python3-talloc  python3-tdb python3.8 python3.8-minimal tdb-tools ucf  \
+	&& rm -rf /var/lib/apt/lists/* \
+	&& tar -xf /artifacts.tar \
+	&& rm -rf /artifacts.tar
+
+ENV PATH=/usr/local/samba/bin/:/usr/local/samba/sbin/:$PATH
+
+RUN ldconfig
 
 EXPOSE 137 138 139 445
 
