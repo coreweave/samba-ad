@@ -104,6 +104,7 @@ variables:
 
 stages:
   - build
+  - tag
 
 build-samba4.16.1-ubuntu20.04:
   <<: *kaniko
@@ -112,3 +113,20 @@ build-samba4.16.1-ubuntu20.04:
     <<: *variables
     PROJECT_VERSION: "4.16.1"
     DISTRO: ubuntu20.04
+
+generate-release-version-tag:
+  needs: [build-samba4.16.1-ubuntu20.04]
+  image: node:16
+  stage: tag
+  tags:
+    - ord1-tenant
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "master"'
+  before_script:
+    - npm install
+  script:
+    - CI_BUILD_TOKEN=$CI_JOB_TOKEN npx semantic-release
+  artifacts:
+    expire_in: 1 day
+    paths:
+      - artifacts.env
