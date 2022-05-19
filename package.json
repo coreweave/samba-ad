@@ -1,0 +1,13 @@
+{
+  "name": "samba-ad",
+  "description": "",
+  "author": "",
+  "license": "ISC",
+  "dependencies": {},
+  "devDependencies": {
+    "@intuit/semantic-release-slack": "^1.0.6",
+    "@semantic-release/exec": "^6.0.3",
+    "@semantic-release/changelog": "^6.0.1",
+    "semantic-release": "^19.0.2"
+  }
+}
