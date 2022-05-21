@@ -12,6 +12,7 @@ workflow:
     - if: $CI_COMMIT_TAG
       when: never
     - if: '$CI_PIPELINE_SOURCE == "push" || $CI_PIPELINE_SOURCE == "web" || $CI_PIPELINE_SOURCE == "pipeline" || $CI_COMMIT_REF_NAME == "master"'
+      when: always
 
 variables:
   # kaniko caching docs: https://cloud.google.com/build/docs/kaniko-cache
@@ -107,6 +108,11 @@ stages:
 build-samba4.16.1-ubuntu20.04:
   <<: *kaniko
   stage: build
+  rules:
+    - if: '$CI_COMMIT_REF_NAME != "master"'
+      when: manual
+    - if: '$CI_COMMIT_BRANCH == "master"'
+      when: always
   variables:
     <<: *variables
     PROJECT_VERSION: "4.16.1"
