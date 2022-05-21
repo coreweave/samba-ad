@@ -33,6 +33,8 @@ cat > /etc/samba/user.map << EOL
 !root = ${DOMAINNAME}\Administrator ${DOMAINNAME}\administrator Administrator administrator
 EOL
 
+if [ -w /usr/local/samba/etc/smb.conf ]
+then
 cat > /usr/local/samba/etc/smb.conf << EOL
 [global]
     workgroup = ${DOMAINNAME}
@@ -107,7 +109,10 @@ cat > /usr/local/samba/etc/smb.conf << EOL
     min receivefile size = 16384
     use sendfile = true
 EOL
+fi
 
+if [ -w /usr/local/samba/etc/smb.conf ]
+then
 for var in ${!SHARE@};
 do
 echo "" >> /usr/local/samba/etc/smb.conf
@@ -118,6 +123,7 @@ echo "   guest ok = no" >> /usr/local/samba/etc/smb.conf
 done
 
 echo "" >> /usr/local/samba/etc/smb.conf
+fi
 
 net ads join -U"${AD_USERNAME}"%"${AD_PASSWORD}" || exit 1
 
