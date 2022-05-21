@@ -33,7 +33,7 @@ cat > /etc/samba/user.map << EOL
 !root = ${DOMAINNAME}\Administrator ${DOMAINNAME}\administrator Administrator administrator
 EOL
 
-if [ -w /usr/local/samba/etc/smb.conf ]
+if [ -w /usr/local/samba/etc/smb.conf ] || [ ! -f /usr/local/samba/etc/smb.conf ]
 then
 cat > /usr/local/samba/etc/smb.conf << EOL
 [global]
@@ -111,7 +111,7 @@ cat > /usr/local/samba/etc/smb.conf << EOL
 EOL
 fi
 
-if [ -w /usr/local/samba/etc/smb.conf ]
+if [ -w /usr/local/samba/etc/smb.conf ] || [ ! -f /usr/local/samba/etc/smb.conf ]
 then
 for var in ${!SHARE@};
 do
