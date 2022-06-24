@@ -105,7 +105,7 @@ stages:
   - build
   - tag
 
-build-samba4.16.1-ubuntu20.04:
+build-samba4.17.0-ubuntu20.04:
   <<: *kaniko
   stage: build
   rules:
@@ -115,11 +115,11 @@ build-samba4.16.1-ubuntu20.04:
       when: always
   variables:
     <<: *variables
-    PROJECT_VERSION: "4.16.1"
+    PROJECT_VERSION: "4.17.0"
     DISTRO: ubuntu20.04
 
 generate-release-version-tag:
-  needs: [build-samba4.16.1-ubuntu20.04]
+  needs: [build-samba4.17.0-ubuntu20.04]
   image: node:16
   stage: tag
   tags:
