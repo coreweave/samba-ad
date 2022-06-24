@@ -78,7 +78,7 @@ cat > /usr/local/samba/etc/smb.conf << EOL
     map acl inherit = Yes
     store dos attributes = Yes
     acl_xattr:ignore system acls = no
-    xattr:unprotected_ntacl_name = user.NTACL
+    acl_xattr:security_acl_name = user.NTACL
 
     # Share Setting Globally
     unix extensions = yes

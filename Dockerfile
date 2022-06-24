@@ -101,15 +101,11 @@ RUN apt-get -y update && \
     xsltproc \
     zlib1g-dev
 
-COPY samba-4.16.1.tar.gz /samba-4.16.1.tar.gz
+RUN wget https://download.samba.org/pub/samba/stable/samba-4.17.0.tar.gz
 
-COPY 1908_update_4-16-stable.patch.txt /tmp/patch.txt
+RUN tar -zxf samba-4.17.0.tar.gz
 
-RUN tar -zxf samba-4.16.1.tar.gz
-
-WORKDIR /samba-4.16.1
-
-RUN patch -p 1 < /tmp/patch.txt
+WORKDIR /samba-4.17.0
 
 RUN ./configure
 
@@ -123,7 +119,7 @@ ENV PATH=/usr/local/samba/bin/:/usr/local/samba/sbin/:$PATH
 
 WORKDIR /
 
-RUN rm -rf /samba-4.16.1
+RUN rm -rf /samba-4.17.0
 
 RUN mv -v /usr/local/samba/lib/libnss_win{s,bind}.so.*  /lib
 
