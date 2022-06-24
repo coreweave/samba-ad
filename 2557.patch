@@ -1,0 +1,568 @@
+From 9490d1bf774d30ac4607c0c3558cf8a23f070a8b Mon Sep 17 00:00:00 2001
+From: Ralph Boehme <slow@samba.org>
+Date: Fri, 3 Jun 2022 05:37:01 +0200
+Subject: [PATCH] vfs_acl_xattr: add acl_xattr:security_acl_name option
+
+---
+ docs-xml/manpages/vfs_acl_xattr.8.xml |  19 ++
+ selftest/target/Samba3.pm             |   6 +
+ source3/modules/vfs_acl_common.h      |   1 +
+ source3/modules/vfs_acl_xattr.c       | 243 +++++++++++++++++++++++++-
+ source3/selftest/tests.py             |   2 +
+ source4/selftest/tests.py             |   1 +
+ source4/torture/smb2/ea.c             | 152 ++++++++++++++++
+ source4/torture/smb2/smb2.c           |   1 +
+ source4/torture/smb2/wscript_build    |   1 +
+ 9 files changed, 425 insertions(+), 1 deletion(-)
+ create mode 100644 source4/torture/smb2/ea.c
+
+diff --git a/docs-xml/manpages/vfs_acl_xattr.8.xml b/docs-xml/manpages/vfs_acl_xattr.8.xml
+index 9937076d9bc..5a26359fa26 100644
+--- a/docs-xml/manpages/vfs_acl_xattr.8.xml
++++ b/docs-xml/manpages/vfs_acl_xattr.8.xml
+@@ -61,6 +61,25 @@
+ 
+ 	<variablelist>
+ 		<!-- please keep in sync with the other acl vfs modules that provide the same options -->
++		<varlistentry>
++		<term>acl_xattr:security_acl_name = NAME</term>
++		<listitem>
++		<para>
++                This option allows to redefine the default location for the
++                NTACL extended attribute (xattr). If not set, NTACL xattrs are
++                written to security.NTACL which is a protected location, which
++                means the content of the security.NTACL attribute is not
++                accessible from normal users outside of Samba. When this option
++                is set to use a user-defined value, e.g. user.NTACL then any
++                user can potentially access and overwrite this information. The
++                module prevents access to this xattr over SMB, but the xattr may
++                still be accessed by other means (eg local access, SSH, NFS). This option must only be used
++                when this consequence is clearly understood and when specific precautions
++                are taken to avoid compromising the ACL content.
++		</para>
++		</listitem>
++		</varlistentry>
++
+ 		<varlistentry>
+ 		<term>acl_xattr:ignore system acls = [yes|no]</term>
+ 		<listitem>
+diff --git a/selftest/target/Samba3.pm b/selftest/target/Samba3.pm
+index db8c55602da..e8afded4b7b 100755
+--- a/selftest/target/Samba3.pm
++++ b/selftest/target/Samba3.pm
+@@ -1939,6 +1939,12 @@ sub setup_fileserver
+ 	path = $volume_serial_number_sharedir
+ 	volume serial number = 0xdeadbeef
+ 
++[ea_acl_xattr]
++	path = $share_dir
++	vfs objects = acl_xattr
++	acl_xattr:security_acl_name = user.hackme
++	read only = no
++
+ [homes]
+ 	comment = Home directories
+ 	browseable = No
+diff --git a/source3/modules/vfs_acl_common.h b/source3/modules/vfs_acl_common.h
+index e7ec498f586..8d3475f5dac 100644
+--- a/source3/modules/vfs_acl_common.h
++++ b/source3/modules/vfs_acl_common.h
+@@ -27,6 +27,7 @@
+ struct acl_common_config {
+ 	bool ignore_system_acls;
+ 	enum default_acl_style default_acl_style;
++	char *security_acl_xattr_name;
+ };
+ 
+ struct acl_common_fsp_ext {
+diff --git a/source3/modules/vfs_acl_xattr.c b/source3/modules/vfs_acl_xattr.c
+index ad11e20b7dc..1a3ab34d659 100644
+--- a/source3/modules/vfs_acl_xattr.c
++++ b/source3/modules/vfs_acl_xattr.c
+@@ -24,6 +24,8 @@
+ #include "librpc/gen_ndr/xattr.h"
+ #include "auth.h"
+ #include "vfs_acl_common.h"
++#include "lib/util/tevent_ntstatus.h"
++#include "lib/util/tevent_unix.h"
+ 
+ /* Pull in the common functions. */
+ #define ACL_MODULE_NAME "acl_xattr"
+@@ -184,6 +186,7 @@ static int connect_acl_xattr(struct vfs_handle_struct *handle,
+ 				const char *service,
+ 				const char *user)
+ {
++	const char *security_acl_xattr_name = NULL;
+ 	int ret = SMB_VFS_NEXT_CONNECT(handle, service, user);
+ 	bool ok;
+ 	struct acl_common_config *config = NULL;
+@@ -247,6 +250,17 @@ static int connect_acl_xattr(struct vfs_handle_struct *handle,
+ 				"yes");
+ 	}
+ 
++	security_acl_xattr_name = lp_parm_const_string(SNUM(handle->conn),
++					  "acl_xattr",
++					  "security_acl_name",
++					  NULL);
++	if (security_acl_xattr_name != NULL) {
++		config->security_acl_xattr_name = talloc_strdup(config, security_acl_xattr_name);
++		if (config->security_acl_xattr_name == NULL) {
++			return -1;
++		}
++	}
++
+ 	return 0;
+ }
+ 
+@@ -294,13 +308,240 @@ static NTSTATUS acl_xattr_fset_nt_acl(vfs_handle_struct *handle,
+ 	return status;
+ }
+ 
++struct acl_xattr_getxattrat_state {
++	struct vfs_aio_state aio_state;
++	ssize_t xattr_size;
++	uint8_t *xattr_value;
++};
++
++static void acl_xattr_getxattrat_done(struct tevent_req *subreq);
++
++static struct tevent_req *acl_xattr_getxattrat_send(
++				TALLOC_CTX *mem_ctx,
++				struct tevent_context *ev,
++				struct vfs_handle_struct *handle,
++				files_struct *dirfsp,
++				const struct smb_filename *smb_fname,
++				const char *xattr_name,
++				size_t alloc_hint)
++{
++	struct tevent_req *req = NULL;
++	struct tevent_req *subreq = NULL;
++	struct acl_xattr_getxattrat_state *state = NULL;
++	struct acl_common_config *config = NULL;
++
++	SMB_VFS_HANDLE_GET_DATA(handle, config,
++				struct acl_common_config,
++				return NULL);
++
++	req = tevent_req_create(mem_ctx, &state,
++				struct acl_xattr_getxattrat_state);
++	if (req == NULL) {
++		return NULL;
++	}
++
++	if (strequal(xattr_name, config->security_acl_xattr_name)) {
++		tevent_req_nterror(req, NT_STATUS_ACCESS_DENIED);
++		return tevent_req_post(req, ev);
++	}
++	if (config->security_acl_xattr_name != NULL &&
++	    strequal(xattr_name, XATTR_NTACL_NAME))
++	{
++		xattr_name = config->security_acl_xattr_name;
++	}
++
++	subreq = SMB_VFS_NEXT_GETXATTRAT_SEND(state,
++					      ev,
++					      handle,
++					      dirfsp,
++					      smb_fname,
++					      xattr_name,
++					      alloc_hint);
++	if (tevent_req_nomem(subreq, req)) {
++		return tevent_req_post(req, ev);
++	}
++	tevent_req_set_callback(subreq, acl_xattr_getxattrat_done, req);
++
++	return req;
++}
++
++static void acl_xattr_getxattrat_done(struct tevent_req *subreq)
++{
++	struct tevent_req *req = tevent_req_callback_data(
++		subreq, struct tevent_req);
++	struct acl_xattr_getxattrat_state *state = tevent_req_data(
++		req, struct acl_xattr_getxattrat_state);
++
++	state->xattr_size = SMB_VFS_NEXT_GETXATTRAT_RECV(subreq,
++							 &state->aio_state,
++							 state,
++							 &state->xattr_value);
++	TALLOC_FREE(subreq);
++	if (state->xattr_size == -1) {
++		tevent_req_error(req, state->aio_state.error);
++		return;
++	}
++
++	tevent_req_done(req);
++}
++
++static ssize_t acl_xattr_getxattrat_recv(struct tevent_req *req,
++					 struct vfs_aio_state *aio_state,
++					 TALLOC_CTX *mem_ctx,
++					 uint8_t **xattr_value)
++{
++	struct acl_xattr_getxattrat_state *state = tevent_req_data(
++		req, struct acl_xattr_getxattrat_state);
++	ssize_t xattr_size;
++
++	if (tevent_req_is_unix_error(req, &aio_state->error)) {
++		tevent_req_received(req);
++		return -1;
++	}
++
++	*aio_state = state->aio_state;
++	xattr_size = state->xattr_size;
++	if (xattr_value != NULL) {
++		*xattr_value = talloc_move(mem_ctx, &state->xattr_value);
++	}
++
++	tevent_req_received(req);
++	return xattr_size;
++}
++
++static ssize_t acl_xattr_fgetxattr(struct vfs_handle_struct *handle,
++				   struct files_struct *fsp,
++				   const char *name,
++				   void *value,
++				   size_t size)
++{
++	struct acl_common_config *config = NULL;
++
++	SMB_VFS_HANDLE_GET_DATA(handle, config,
++				struct acl_common_config,
++				return -1);
++
++	if (strequal(name, config->security_acl_xattr_name)) {
++		errno = EACCES;
++		return -1;
++	}
++	if (config->security_acl_xattr_name != NULL &&
++	    strequal(name, XATTR_NTACL_NAME))
++	{
++		name = config->security_acl_xattr_name;
++	}
++
++	return SMB_VFS_NEXT_FGETXATTR(handle, fsp, name, value, size);
++}
++
++static ssize_t acl_xattr_flistxattr(struct vfs_handle_struct *handle,
++				    struct files_struct *fsp,
++				    char *listbuf,
++				    size_t bufsize)
++{
++	struct acl_common_config *config = NULL;
++	ssize_t size;
++	char *p = NULL;
++	size_t nlen, consumed;
++
++	SMB_VFS_HANDLE_GET_DATA(handle, config,
++				struct acl_common_config,
++				return -1);
++
++	size = SMB_VFS_NEXT_FLISTXATTR(handle, fsp, listbuf, bufsize);
++	if (size < 0) {
++		return -1;
++	}
++
++	p = listbuf;
++	while (p - listbuf < size) {
++		nlen = strlen(p) + 1;
++		if (strequal(p, config->security_acl_xattr_name)) {
++			break;
++		}
++		p += nlen;
++	}
++	if (p - listbuf >= size) {
++		/* No match */
++		return size;
++	}
++
++	/*
++	 * The consumed helper variable just makes the math
++	 * a bit more digestible.
++	 */
++	consumed = p - listbuf;
++	if (consumed + nlen < size) {
++		/* If not the last name move, else just skip */
++		memmove(p, p + nlen, size - consumed - nlen);
++	}
++	size -= nlen;
++
++	return size;
++}
++
++static int acl_xattr_fremovexattr(struct vfs_handle_struct *handle,
++				  struct files_struct *fsp,
++				  const char *name)
++{
++	struct acl_common_config *config = NULL;
++
++	SMB_VFS_HANDLE_GET_DATA(handle, config,
++				struct acl_common_config,
++				return -1);
++
++	if (strequal(name, config->security_acl_xattr_name)) {
++		errno = EACCES;
++		return -1;
++	}
++	if (config->security_acl_xattr_name != NULL &&
++	    strequal(name, XATTR_NTACL_NAME))
++	{
++		name = config->security_acl_xattr_name;
++	}
++
++	return SMB_VFS_NEXT_FREMOVEXATTR(handle, fsp, name);
++}
++
++static int acl_xattr_fsetxattr(struct vfs_handle_struct *handle,
++			       struct files_struct *fsp,
++			       const char *name,
++			       const void *value,
++			       size_t size,
++			       int flags)
++{
++	struct acl_common_config *config = NULL;
++
++	SMB_VFS_HANDLE_GET_DATA(handle, config,
++				struct acl_common_config,
++				return -1);
++
++	if (strequal(name, config->security_acl_xattr_name)) {
++		errno = EACCES;
++		return -1;
++	}
++	if (config->security_acl_xattr_name != NULL &&
++	    strequal(name, XATTR_NTACL_NAME))
++	{
++		name = config->security_acl_xattr_name;
++	}
++
++	return SMB_VFS_NEXT_FSETXATTR(handle, fsp, name, value, size, flags);
++}
++
+ static struct vfs_fn_pointers vfs_acl_xattr_fns = {
+ 	.connect_fn = connect_acl_xattr,
+ 	.unlinkat_fn = acl_xattr_unlinkat,
+ 	.fchmod_fn = fchmod_acl_module_common,
+ 	.fget_nt_acl_fn = acl_xattr_fget_nt_acl,
+ 	.fset_nt_acl_fn = acl_xattr_fset_nt_acl,
+-	.sys_acl_set_fd_fn = sys_acl_set_fd_xattr
++	.sys_acl_set_fd_fn = sys_acl_set_fd_xattr,
++	.getxattrat_send_fn = acl_xattr_getxattrat_send,
++	.getxattrat_recv_fn = acl_xattr_getxattrat_recv,
++	.fgetxattr_fn = acl_xattr_fgetxattr,
++	.flistxattr_fn = acl_xattr_flistxattr,
++	.fremovexattr_fn = acl_xattr_fremovexattr,
++	.fsetxattr_fn = acl_xattr_fsetxattr,
+ };
+ 
+ static_decl_vfs;
+diff --git a/source3/selftest/tests.py b/source3/selftest/tests.py
+index c53be8b471b..dc3cd4f71a3 100755
+--- a/source3/selftest/tests.py
++++ b/source3/selftest/tests.py
+@@ -1011,6 +1011,8 @@ for t in tests:
+         plansmbtorture4testsuite(t, "nt4_dc", '//$SERVER_IP/tmp -U$USERNAME%$PASSWORD')
+         plansmbtorture4testsuite(t, "nt4_dc", '//$SERVER_IP/aio -U$USERNAME%$PASSWORD', 'aio')
+         plansmbtorture4testsuite(t, "ad_dc", '//$SERVER/tmp -U$USERNAME%$PASSWORD')
++    elif t == "smb2.ea":
++        plansmbtorture4testsuite(t, "fileserver", '//$SERVER/ea_acl_xattr --option=torture:acl_xattr_name=hackme -U$USERNAME%$PASSWORD')
+     elif t == "rpc.samba3.netlogon" or t == "rpc.samba3.sessionkey":
+         plansmbtorture4testsuite(t, "nt4_dc_smb1", '//$SERVER_IP/tmp -U$USERNAME%$PASSWORD --option=torture:wksname=samba3rpctest')
+         plansmbtorture4testsuite(t, "ad_dc_smb1", '//$SERVER/tmp -U$USERNAME%$PASSWORD --option=torture:wksname=samba3rpctest')
+diff --git a/source4/selftest/tests.py b/source4/selftest/tests.py
+index 32de26a9d23..dffe88a68d8 100755
+--- a/source4/selftest/tests.py
++++ b/source4/selftest/tests.py
+@@ -380,6 +380,7 @@ smb2_s3only = [
+     "smb2.timestamps",
+     "smb2.async_dosmode",
+     "smb2.twrp",
++    "smb2.ea",
+ ]
+ smb2 = [x for x in smbtorture4_testsuites("smb2.") if x not in smb2_s3only]
+ 
+diff --git a/source4/torture/smb2/ea.c b/source4/torture/smb2/ea.c
+new file mode 100644
+index 00000000000..becacaed77e
+--- /dev/null
++++ b/source4/torture/smb2/ea.c
+@@ -0,0 +1,152 @@
++/*
++   Unix SMB/CIFS implementation.
++   SMB2 EA tests
++
++   Copyright (C) Ralph Boehme 2022
++
++   This program is free software; you can redistribute it and/or modify
++   it under the terms of the GNU General Public License as published by
++   the Free Software Foundation; either version 3 of the License, or
++   (at your option) any later version.
++
++   This program is distributed in the hope that it will be useful,
++   but WITHOUT ANY WARRANTY; without even the implied warranty of
++   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
++   GNU General Public License for more details.
++
++   You should have received a copy of the GNU General Public License
++   along with this program.  If not, see <http://www.gnu.org/licenses/>.
++*/
++
++#include "includes.h"
++#include "ntstatus_gen.h"
++#include "system/time.h"
++#include "libcli/smb2/smb2.h"
++#include "libcli/smb2/smb2_calls.h"
++#include "torture/torture.h"
++#include "torture/smb2/proto.h"
++
++#define BASEDIR "test_ea"
++
++static bool find_returned_ea(union smb_fileinfo *finfo2,
++			     const char *eaname)
++{
++	unsigned int i;
++	unsigned int num_eas = finfo2->all_eas.out.num_eas;
++	struct ea_struct *eas = finfo2->all_eas.out.eas;
++
++	for (i = 0; i < num_eas; i++) {
++		if (eas[i].name.s == NULL) {
++			continue;
++		}
++		/* Windows capitalizes returned EA names. */
++		if (strequal(eas[i].name.s, eaname)) {
++			return true;
++		}
++	}
++	return false;
++}
++
++static bool torture_smb2_acl_xattr(struct torture_context *tctx,
++				   struct smb2_tree *tree)
++{
++	const char *fname = BASEDIR "\\test_acl_xattr";
++	const char *xattr_name = NULL;
++	struct smb2_handle h1;
++	struct ea_struct ea;
++	union smb_fileinfo finfo;
++	union smb_setfileinfo sfinfo;
++	NTSTATUS status;
++	bool ret = true;
++
++	torture_comment(tctx, "Verify NTACL xattr can't be accessed\n");
++
++	xattr_name = torture_setting_string(tctx, "acl_xattr_name", NULL);
++	torture_assert_not_null(tctx, xattr_name, "Missing acl_xattr_name option\n");
++
++	smb2_deltree(tree, BASEDIR);
++
++	status = torture_smb2_testdir(tree, BASEDIR, &h1);
++	torture_assert_ntstatus_ok_goto(tctx, status, ret, done,
++					"torture_smb2_testdir\n");
++	smb2_util_close(tree, h1);
++
++	status = torture_smb2_testfile(tree, fname, &h1);
++	torture_assert_ntstatus_ok_goto(tctx, status, ret, done,
++					"torture_smb2_testfile failed\n");
++
++	/*
++	 * 1. Set an EA, so we have somthing to list
++	 */
++	ZERO_STRUCT(ea);
++	ea.name.s = "void";
++	ea.name.private_length = strlen("void") + 1;
++	ea.value = data_blob_string_const("testme");
++
++	ZERO_STRUCT(sfinfo);
++	sfinfo.generic.level = RAW_SFILEINFO_FULL_EA_INFORMATION;
++	sfinfo.generic.in.file.handle = h1;
++	sfinfo.full_ea_information.in.eas.num_eas = 1;
++	sfinfo.full_ea_information.in.eas.eas = &ea;
++
++	status = smb2_setinfo_file(tree, &sfinfo);
++	torture_assert_ntstatus_ok_goto(tctx, status, ret, done,
++					"Setting EA should faild\n");
++
++	/*
++	 * 2. Verify NT ACL EA is not listed
++	 */
++	ZERO_STRUCT(finfo);
++	finfo.generic.level = RAW_FILEINFO_SMB2_ALL_EAS;
++	finfo.generic.in.file.handle = h1;
++
++	status = smb2_getinfo_file(tree, tctx, &finfo);
++	torture_assert_ntstatus_ok_goto(tctx, status, ret, done,
++					"torture_smb2_testdir\n");
++
++	if (find_returned_ea(&finfo, xattr_name)) {
++		torture_result(tctx, TORTURE_FAIL,
++			       "%s: NTACL EA leaked\n",
++			       __location__);
++		ret = false;
++		goto done;
++	}
++
++	/*
++	 * 3. Try to set EA, should fail
++	 */
++	ZERO_STRUCT(ea);
++	ea.name.s = xattr_name;
++	ea.name.private_length = strlen(xattr_name) + 1;
++	ea.value = data_blob_string_const("testme");
++
++	ZERO_STRUCT(sfinfo);
++	sfinfo.generic.level = RAW_SFILEINFO_FULL_EA_INFORMATION;
++	sfinfo.generic.in.file.handle = h1;
++	sfinfo.full_ea_information.in.eas.num_eas = 1;
++	sfinfo.full_ea_information.in.eas.eas = &ea;
++
++	status = smb2_setinfo_file(tree, &sfinfo);
++	torture_assert_ntstatus_equal_goto(
++		tctx, status, NT_STATUS_ACCESS_DENIED,
++		ret, done, "Setting EA should fail\n");
++
++done:
++	if (!smb2_util_handle_empty(h1)) {
++		smb2_util_close(tree, h1);
++	}
++
++	smb2_deltree(tree, BASEDIR);
++
++	return ret;
++}
++
++struct torture_suite *torture_smb2_ea(TALLOC_CTX *ctx)
++{
++	struct torture_suite *suite = torture_suite_create(ctx, "ea");
++	suite->description = talloc_strdup(suite, "SMB2-EA tests");
++
++	torture_suite_add_1smb2_test(suite, "acl_xattr", torture_smb2_acl_xattr);
++
++	return suite;
++}
+diff --git a/source4/torture/smb2/smb2.c b/source4/torture/smb2/smb2.c
+index e3c05043e84..190538522dd 100644
+--- a/source4/torture/smb2/smb2.c
++++ b/source4/torture/smb2/smb2.c
+@@ -214,6 +214,7 @@ NTSTATUS torture_smb2_init(TALLOC_CTX *ctx)
+ 	torture_suite_add_1smb2_test(suite, "secleak", torture_smb2_sec_leak);
+ 	torture_suite_add_1smb2_test(suite, "session-id", run_sessidtest);
+ 	torture_suite_add_suite(suite, torture_smb2_deny_init(suite));
++	torture_suite_add_suite(suite, torture_smb2_ea(suite));
+ 
+ 	suite->description = talloc_strdup(suite, "SMB2-specific tests");
+ 
+diff --git a/source4/torture/smb2/wscript_build b/source4/torture/smb2/wscript_build
+index 64b3e364a1b..93434268c6f 100644
+--- a/source4/torture/smb2/wscript_build
++++ b/source4/torture/smb2/wscript_build
+@@ -16,6 +16,7 @@ bld.SAMBA_MODULE('TORTURE_SMB2',
+         dosmode.c
+         durable_open.c
+         durable_v2_open.c
++        ea.c
+         getinfo.c
+         ioctl.c
+         lease.c
+-- 
+GitLab
+
