@@ -103,13 +103,9 @@ RUN apt-get -y update && \
 
 COPY samba-master.tar.gz /samba-master.tar.gz
 
-COPY 2557.patch /tmp/patch.txt
-
 RUN tar -zxf samba-master.tar.gz
 
 WORKDIR /samba-master
-
-RUN patch -p 1 < /tmp/patch.txt
 
 RUN ./configure
 
