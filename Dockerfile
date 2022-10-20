@@ -1,4 +1,6 @@
-FROM ubuntu:focal AS builder
+FROM ${DISTRO_IMAGE}:${DISTRO_TAG} AS builder
+
+ARG PROJECT_VERSION=${PROJECT_VERSION}
 
 SHELL ["/bin/bash", "-c"]
 
@@ -101,11 +103,11 @@ RUN apt-get -y update && \
     xsltproc \
     zlib1g-dev
 
-RUN wget https://download.samba.org/pub/samba/stable/samba-4.17.0.tar.gz
+RUN wget https://download.samba.org/pub/samba/stable/samba-${PROJECT_VERSION}.tar.gz
 
-RUN tar -zxf samba-4.17.0.tar.gz
+RUN tar -zxf samba-${PROJECT_VERSION}.tar.gz
 
-WORKDIR /samba-4.17.0
+WORKDIR /samba-${PROJECT_VERSION}
 
 RUN ./configure
 
@@ -119,7 +121,7 @@ ENV PATH=/usr/local/samba/bin/:/usr/local/samba/sbin/:$PATH
 
 WORKDIR /
 
-RUN rm -rf /samba-4.17.0
+RUN rm -rf /samba-${PROJECT_VERSION}
 
 RUN mv -v /usr/local/samba/lib/libnss_win{s,bind}.so.*  /lib
 
@@ -135,7 +137,7 @@ RUN chmod +x /entrypoint.sh
 
 RUN tar -cf artifacts.tar /usr/local/ /etc/samba/ /entrypoint.sh /etc/supervisor/conf.d/supervisord.conf /lib/libnss_win{s,bind}.so.*
 
-FROM ubuntu:focal
+FROM ${DISTRO_IMAGE}:${DISTRO_TAG}
 
 SHELL ["/bin/bash", "-c"]
 
