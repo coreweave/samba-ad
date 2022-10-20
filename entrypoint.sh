@@ -78,7 +78,7 @@ cat > /usr/local/samba/etc/smb.conf << EOL
     map acl inherit = Yes
     store dos attributes = Yes
     acl_xattr:ignore system acls = no
-    xattr:unprotected_ntacl_name = user.NTACL
+    acl_xattr:security_acl_name = user.NTACL
 
     # Share Setting Globally
     unix extensions = yes
@@ -97,7 +97,7 @@ cat > /usr/local/samba/etc/smb.conf << EOL
     client min protocol = SMB2_10
     server min protocol = SMB2_10
     smb encrypt = auto
-    log level = 1
+    log level = ${LOG_LEVEL:="1"}
     log file = /dev/stdout
 
     #SMB Multichannel
