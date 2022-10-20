@@ -69,7 +69,7 @@ variables:
   KANIKO_CONTEXT: "${CI_PROJECT_DIR}"
   KANIKO_DOCKERFILE: "${CI_PROJECT_DIR}/Dockerfile"
   KANIKO_IMAGE: $CI_REGISTRY_IMAGE
-  KANIKO_TAGS: $CI_BUILD_REF_SLUG-$PROJECT_VERSION-$DISTRO $CI_COMMIT_SHORT_SHA-$PROJECT_VERSION-$DISTRO
+  KANIKO_TAGS: $CI_BUILD_REF_SLUG-$PROJECT_VERSION-$DISTRO_IMAGE-$DISTRO_TAG $CI_COMMIT_SHORT_SHA-$PROJECT_VERSION-$DISTRO_IMAGE-$DISTRO_TAG
   KANIKO_ARGS: >-
     --cache=true
     --cache-copy-layers=true
@@ -82,8 +82,9 @@ variables:
     --snapshotMode=redo
     --reproducible=true
     --verbosity=${KANIKO_VERBOSITY}
-    --build-arg PROJECT_VERSION=$PROJECT_VERSION
-    --build-arg DISTRO=$DISTRO
+    --build-arg PROJECT_VERSION=${PROJECT_VERSION}
+    --build-arg DISTRO_IMAGE=${DISTRO_IMAGE}
+    --build-arg DISTRO_TAG=${DISTRO_TAG}
   KANIKO_IMAGE_LABELS: >-
     --label org.opencontainers.image.vendor=$CI_SERVER_URL/$CI_PROJECT_NAMESPACE
     --label org.opencontainers.image.authors=$CI_SERVER_URL/$CI_PROJECT_NAMESPACE
@@ -105,7 +106,7 @@ stages:
   - build
   - tag
 
-build-samba4.17.0-ubuntu20.04:
+build-samba-ad-ubuntu:
   <<: *kaniko
   stage: build
   rules:
@@ -115,11 +116,11 @@ build-samba4.17.0-ubuntu20.04:
       when: always
   variables:
     <<: *variables
-    PROJECT_VERSION: "4.17.0"
-    DISTRO: ubuntu20.04
+    DISTRO_IMAGE: ubuntu
+    DISTRO_TAG: focal
 
 generate-release-version-tag:
-  needs: [build-samba4.17.0-ubuntu20.04]
+  needs: [build-samba-ad-ubuntu]
   image: node:16
   stage: tag
   tags:
