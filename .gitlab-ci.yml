@@ -116,7 +116,7 @@ build-samba-ad-ubuntu:
       when: always
   variables:
     <<: *variables
-    PROJECT_VERSION: "4.18.0"
+    PROJECT_VERSION: "4.18.1"
     DISTRO_IMAGE: ubuntu
     DISTRO_TAG: focal
 
