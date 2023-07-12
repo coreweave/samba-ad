@@ -69,7 +69,7 @@ variables:
   KANIKO_CONTEXT: "${CI_PROJECT_DIR}"
   KANIKO_DOCKERFILE: "${CI_PROJECT_DIR}/Dockerfile"
   KANIKO_IMAGE: $CI_REGISTRY_IMAGE
-  KANIKO_TAGS: $CI_BUILD_REF_SLUG-$PROJECT_VERSION-$DISTRO_IMAGE-$DISTRO_TAG $CI_COMMIT_SHORT_SHA-$PROJECT_VERSION-$DISTRO_IMAGE-$DISTRO_TAG
+  KANIKO_TAGS: $CI_COMMIT_REF_SLUG-$PROJECT_VERSION-$DISTRO_IMAGE-$DISTRO_TAG $CI_COMMIT_SHORT_SHA-$PROJECT_VERSION-$DISTRO_IMAGE-$DISTRO_TAG
   KANIKO_ARGS: >-
     --cache=true
     --cache-copy-layers=true
@@ -96,7 +96,7 @@ variables:
     --label vcs-url=$CI_PROJECT_URL
     --label com.gitlab.ci.user=$CI_SERVER_URL/$GITLAB_USER_LOGIN
     --label com.gitlab.ci.email=$GITLAB_USER_EMAIL
-    --label com.gitlab.ci.tagorbranch=$CI_BUILD_REF_SLUG
+    --label com.gitlab.ci.tagorbranch=$CI_COMMIT_REF_SLUG
     --label com.gitlab.ci.pipelineurl=$CI_PIPELINE_URL
     --label com.gitlab.ci.commiturl=$CI_PROJECT_URL/commit/$CI_COMMIT_SHA
     --label com.gitlab.ci.cijoburl=$CI_JOB_URL
@@ -131,7 +131,7 @@ generate-release-version-tag:
   before_script:
     - npm install
   script:
-    - CI_BUILD_TOKEN=$CI_JOB_TOKEN npx semantic-release
+    - CI_JOB_TOKEN=$CI_JOB_TOKEN npx semantic-release
   artifacts:
     expire_in: 1 day
     paths:
